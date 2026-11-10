@@ -1,6 +1,6 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.0.1-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.0.2-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
@@ -60,7 +60,7 @@ claude plugin install token-speed --marketplace hermanzhaozzzz/claude-token-spee
 
 | 插件 | Claude Code / Desktop | 状态 |
 |---|---|---|
-| 1.0.1 | 2.1.322 桌面版（插件 API 2.1.321） | 已验证 |
+| 1.0.2 | 2.1.322 桌面版（插件 API 2.1.321） | 已验证 |
 
 本插件使用 Claude Code 的 **function-hooks 插件 API**，该 API 目前是 early access，版本之间可能变化。仓库里有一个每周定时运行的 GitHub Action，用最新 Claude Code 执行 `claude plugin validate .`，API 变化会直接体现为失败的工作流。
 
@@ -96,7 +96,7 @@ types/index.d.ts             状态契约
 | `ACCENT` | `#3AA99A` | 数字、曲线、渐变和端点使用的雾青。 |
 | `WINDOW_MS` | `3000` | 首次调用完成前的实时估算窗口。 |
 | `HISTORY_MAX` | `180` | 曲线采样数；180 × 1 秒 = 3 分钟。 |
-| `SCALE_MAX` | `140` | 曲线固定上限（t/s）。 |
+| 曲线上限 | 自适应 | 从 100 t/s 起步，按最近峰值以 50 t/s 为步长增长。 |
 | `CHART_W` / `CHART_H` | `220` / `24` | SVG 尺寸（CSS 像素）。 |
 
 修改后在会话里执行 `/reload-plugins`。提交前运行：

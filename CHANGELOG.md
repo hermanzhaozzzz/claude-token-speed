@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2 — 2026-11-11
+
+- Use the theme's `planMode` teal for the speed number; desktop text colors accept theme keys rather than raw hex.
+- Leave room for the endpoint ring at the chart's right edge.
+- Scale the chart to the recent peak instead of a fixed 140 t/s ceiling.
+
 ## 1.0.1 — 2026-11-11
 
 - Reduce host clock round-trips while streaming: the live window now samples every 8 chunks instead of every chunk. No visual change.

@@ -8,10 +8,11 @@ const WINDOW_MS = 3000
 const TICK_MS = 1000
 const HISTORY_MAX = 180
 const CALLS_MAX = 10
-const SCALE_MAX = 140
 const CHART_W = 220
 const CHART_H = 24
-const PAD = 2
+const PAD_X = 2
+const PAD_RIGHT = 6
+const PAD_Y = 2
 
 const BLOCKS = '▁▂▃▄▅▆▇█'
 
@@ -119,10 +120,20 @@ function padded(values: number[]): number[] {
     : values.slice(-HISTORY_MAX)
 }
 
+function chartCeiling(values: number[]): number {
+  let peak = 0
+  for (const v of values) {
+    if (v > peak) peak = v
+  }
+  if (peak <= 80) return 100
+  return Math.max(140, Math.ceil(peak / 50) * 50)
+}
+
 function blockSpark(values: number[]): string {
   const all = padded(values)
   const cols = 36
   const size = all.length / cols
+  const ceiling = chartCeiling(all)
   let out = ''
   for (let i = 0; i < cols; i += 1) {
     const a = Math.floor(i * size)
@@ -130,7 +141,7 @@ function blockSpark(values: number[]): string {
     let sum = 0
     for (let j = a; j < b; j += 1) sum += all[j] ?? 0
     const v = sum / (b - a)
-    out += BLOCKS[Math.max(0, Math.min(7, Math.round((v / SCALE_MAX) * 7)))]
+    out += BLOCKS[Math.max(0, Math.min(7, Math.round((v / ceiling) * 7)))]
   }
   return out
 }
@@ -146,9 +157,9 @@ function smoothPath(points: { x: number; y: number }[]): string {
     const p0 = points[i - 1] ?? p1
     const p3 = points[i + 2] ?? p2
     const c1x = p1.x + (p2.x - p0.x) / 6
-    const c1y = Math.max(PAD, Math.min(CHART_H - PAD, p1.y + (p2.y - p0.y) / 6))
+    const c1y = Math.max(PAD_Y, Math.min(CHART_H - PAD_Y, p1.y + (p2.y - p0.y) / 6))
     const c2x = p2.x - (p3.x - p1.x) / 6
-    const c2y = Math.max(PAD, Math.min(CHART_H - PAD, p2.y - (p3.y - p1.y) / 6))
+    const c2y = Math.max(PAD_Y, Math.min(CHART_H - PAD_Y, p2.y - (p3.y - p1.y) / 6))
     d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`
   }
   return d
@@ -156,12 +167,13 @@ function smoothPath(points: { x: number; y: number }[]): string {
 
 function renderSvg(values: number[], active: boolean): string {
   const all = padded(values)
+  const ceiling = chartCeiling(all)
   const points = all.map((v, i) => ({
-    x: PAD + (i / (all.length - 1)) * (CHART_W - PAD * 2),
-    y: PAD + (1 - Math.max(0, Math.min(SCALE_MAX, v)) / SCALE_MAX) * (CHART_H - PAD * 2),
+    x: PAD_X + (i / (all.length - 1)) * (CHART_W - PAD_X - PAD_RIGHT),
+    y: PAD_Y + (1 - Math.max(0, Math.min(ceiling, v)) / ceiling) * (CHART_H - PAD_Y * 2),
   }))
   const line = smoothPath(points)
-  const area = `${line} L ${CHART_W - PAD} ${CHART_H - PAD} L ${PAD} ${CHART_H - PAD} Z`
+  const area = `${line} L ${CHART_W - PAD_RIGHT} ${CHART_H - PAD_Y} L ${PAD_X} ${CHART_H - PAD_Y} Z`
   const last = points[points.length - 1]
   if (!last) return ''
   const opacity = active ? 1 : 0.55
@@ -410,7 +422,7 @@ export const register: Register = on => {
       const { Box, Text } = $.ui.resolve(e)
       return (
         <Box width="100%" justifyContent="flex-end" alignItems="center" gap="sm">
-          <Text color={ACCENT} dimColor={!s.isActive}>⚡ {speedText} t/s</Text>
+          <Text color="planMode" dimColor={!s.isActive}>⚡ {speedText} t/s</Text>
           <Text dimColor>{blockSpark(s.history)}</Text>
           <Text dimColor>◎ {cacheText}</Text>
           <Text dimColor>[{ctxBar}] {ctxText}</Text>
@@ -422,7 +434,7 @@ export const register: Register = on => {
     const { Box, Text, Svg } = $.ui.resolve(e)
     return (
       <Box width="100%" justifyContent="flex-end" alignItems="center" gap="sm">
-        <Text color={ACCENT} dimColor={!s.isActive}>⚡ {speedText} t/s</Text>
+        <Text color="planMode" dimColor={!s.isActive}>⚡ {speedText} t/s</Text>
         <Svg
           source={renderSvg(s.history, s.isActive)}
           alt={`Token speed over the last 3 minutes; current ${speedText} tokens per second`}
