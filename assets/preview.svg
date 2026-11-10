@@ -13,7 +13,8 @@
 
   <!-- status band -->
   <g font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="13">
-    <text x="452" y="28" text-anchor="end" fill="#3AA99A" font-weight="650">⚡ 86.4</text>
+    <path d="M407 10 L398 22 L404 22 L403 30 L413 17 L407 17 Z" fill="#3AA99A"/>
+    <text x="452" y="28" text-anchor="end" fill="#3AA99A" font-weight="650">86.4</text>
     <text x="484" y="28" fill="#8a8a8e">t/s</text>
 
     <g transform="translate(496,8)">
