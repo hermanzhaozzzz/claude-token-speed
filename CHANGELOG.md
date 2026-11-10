@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 — 2026-11-11
+
+- Reduce host clock round-trips while streaming: the live window now samples every 8 chunks instead of every chunk. No visual change.
+
 ## 1.0.0 — 2026-11-11
 
 - Initial public release.

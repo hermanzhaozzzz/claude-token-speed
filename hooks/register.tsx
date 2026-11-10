@@ -44,6 +44,7 @@ let calls: Call[] = []
 let stepStartedAt = 0
 let firstTokenAt = 0
 let stepTokens = 0
+let chunksSinceSample = 0
 let samples: Sample[] = []
 
 let timer: Timer | null = null
@@ -254,6 +255,7 @@ function resetSession(): void {
   stepStartedAt = 0
   firstTokenAt = 0
   stepTokens = 0
+  chunksSinceSample = 0
   samples = []
   tickCount = 0
 }
@@ -297,9 +299,13 @@ async function observe($: EngineInterface, chunk: TurnStepChunk): Promise<void> 
   }
   if (added <= 0) return
 
+  stepTokens += added
+  chunksSinceSample += 1
+  if (chunksSinceSample < 8) return
+  chunksSinceSample = 0
+
   const now = await $.clock.now()
   if (firstTokenAt === 0) firstTokenAt = now
-  stepTokens += added
   samples.push({ at: now, tokens: stepTokens })
   while (samples.length > 1) {
     const head = samples[0]
@@ -353,6 +359,7 @@ export const register: Register = on => {
     stepStartedAt = await $.clock.now()
     firstTokenAt = 0
     stepTokens = 0
+    chunksSinceSample = 0
     samples = []
 
     const stream = next(e)
