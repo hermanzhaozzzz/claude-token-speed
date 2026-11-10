@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4 — 2026-11-11
+
+- Draw the speed number inside the same SVG as the curve, so both use the exact teal. Desktop plugin text is otherwise forced to the theme's gold accent.
+- Draw a small vector lightning bolt; the `t/s` unit stays gray.
+- The number remains accessible through the SVG's `alt` text.
+
 ## 1.0.3 — 2026-11-11
 
 - Use the foreground text color for the speed number. Desktop text colors accept only theme keys; the available green (`planMode`) clashed with the teal curve.

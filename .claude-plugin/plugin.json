@@ -1,6 +1,6 @@
 {
   "name": "token-speed",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Live token speed, 3-minute history, cache hit rate, context usage and turn timer above the prompt.",
   "author": {
     "name": "Huanan Herman Zhao",

@@ -1,6 +1,6 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.0.3-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.0.4-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
@@ -60,7 +60,7 @@ Reload an existing session with `/reload-plugins`, or restart the desktop app.
 
 | Plugin | Claude Code / Desktop | Status |
 |---|---|---|
-| 1.0.3 | 2.1.322 desktop (plugin API 2.1.321) | Tested |
+| 1.0.4 | 2.1.322 desktop (plugin API 2.1.321) | Tested |
 
 This plugin uses the Claude Code **function-hooks plugin API**, which is early access and may change between releases. The repository includes a scheduled GitHub Action that runs `claude plugin validate .` against the latest Claude Code release every week, so an API change surfaces as a failed workflow instead of silently breaking the band.
 
@@ -93,7 +93,7 @@ Useful constants at the top of `hooks/register.tsx`:
 
 | Constant | Default | Purpose |
 |---|---|---|
-| `ACCENT` | `#3AA99A` | Teal used by the curve, gradient and endpoint. The speed number uses the foreground text color, since desktop text colors accept only theme keys. |
+| `ACCENT` | `#3AA99A` | Teal used by the speed number, curve, gradient and endpoint. The number and curve share one SVG so the color is exact. |
 | `WINDOW_MS` | `3000` | Live estimate window before the first call completes. |
 | `HISTORY_MAX` | `180` | Chart samples; 180 × 1 s = 3 minutes. |
 | chart ceiling | adaptive | Starts at 100 t/s and grows to the recent peak in 50 t/s steps. |

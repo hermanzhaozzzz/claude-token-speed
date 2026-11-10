@@ -10,6 +10,8 @@ const HISTORY_MAX = 180
 const CALLS_MAX = 10
 const CHART_W = 220
 const CHART_H = 24
+const CHART_X = 112
+const SVG_W = CHART_X + CHART_W
 const PAD_X = 2
 const PAD_RIGHT = 6
 const PAD_Y = 2
@@ -165,7 +167,17 @@ function smoothPath(points: { x: number; y: number }[]): string {
   return d
 }
 
-function renderSvg(values: number[], active: boolean): string {
+function escapeXml(value: string): string {
+  return value.replace(/[<>&"']/g, ch => ({
+    '<': '&lt;',
+    '>': '&gt;',
+    '&': '&amp;',
+    '"': '&quot;',
+    "'": '&apos;',
+  }[ch] ?? ch))
+}
+
+function renderSvg(values: number[], active: boolean, speedText: string): string {
   const all = padded(values)
   const ceiling = chartCeiling(all)
   const points = all.map((v, i) => ({
@@ -182,15 +194,21 @@ function renderSvg(values: number[], active: boolean): string {
     ? `<circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="1.3" fill="${ACCENT}"/>`
     : ''
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${CHART_W}" height="${CHART_H}" viewBox="0 0 ${CHART_W} ${CHART_H}">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${SVG_W}" height="${CHART_H}" viewBox="0 0 ${SVG_W} ${CHART_H}">
 <defs><linearGradient id="ts-area" x1="0" y1="0" x2="0" y2="1">
 <stop offset="0%" stop-color="${ACCENT}" stop-opacity="${fillOpacity}"/>
 <stop offset="100%" stop-color="${ACCENT}" stop-opacity="0"/>
 </linearGradient></defs>
+<g opacity="${opacity}">
+<path d="M5 2 L1 12 L4.5 12 L4 20 L10 9 L6.5 9 Z" fill="${ACCENT}"/>
+<text x="16" y="18" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="13" font-weight="650" fill="${ACCENT}">${escapeXml(speedText)}<tspan fill="#8a8a8e" font-weight="400"> t/s</tspan></text>
+</g>
+<g transform="translate(${CHART_X},0)">
 <path d="${area}" fill="url(#ts-area)"/>
 <path d="${line}" fill="none" stroke="${ACCENT}" stroke-opacity="${opacity}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 <circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="3.2" fill="none" stroke="${ACCENT}" stroke-opacity="${opacity}" stroke-width="1.4"/>
 ${dot}
+</g>
 </svg>`
 }
 
@@ -434,11 +452,10 @@ export const register: Register = on => {
     const { Box, Text, Svg } = $.ui.resolve(e)
     return (
       <Box width="100%" justifyContent="flex-end" alignItems="center" gap="sm">
-        <Text color="text" dimColor={!s.isActive}>⚡ {speedText} t/s</Text>
         <Svg
-          source={renderSvg(s.history, s.isActive)}
+          source={renderSvg(s.history, s.isActive, speedText)}
           alt={`Token speed over the last 3 minutes; current ${speedText} tokens per second`}
-          width={CHART_W}
+          width={SVG_W}
           height={CHART_H}
         />
         <Text dimColor>◎ {cacheText}</Text>
