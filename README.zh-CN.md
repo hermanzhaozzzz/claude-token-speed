@@ -72,6 +72,13 @@ claude plugin validate .
 
 然后按照 `.claude-plugin/types/` 里的新声明更新 `hooks/register.tsx`。
 
+### 适配新的 Claude Code 版本
+
+1. 关注每周的 **validate** workflow，或在本地运行 `claude plugin validate .`。
+2. 打开一个加载该插件的会话，引擎会把最新的 API 声明写到 `.claude-plugin/types/`（已 gitignore）。
+3. 按新声明调整 `hooks/register.tsx`，状态结构变了再改 `types/index.d.ts`。
+4. 运行 `claude plugin validate .`，更新 `.claude-plugin/plugin.json` 的 `version`，在 `CHANGELOG.md` 记一笔，提交并打新 tag。
+
 ## 开发
 
 ```text

@@ -72,6 +72,13 @@ claude plugin validate .
 
 and update `hooks/register.tsx` against the new declarations in `.claude-plugin/types/`.
 
+### Updating for a new Claude Code release
+
+1. Watch the weekly **validate** workflow, or run `claude plugin validate .` locally.
+2. Open a session that loads the plugin. The engine writes fresh API declarations to `.claude-plugin/types/` (gitignored).
+3. Adjust `hooks/register.tsx` and, if state changed, `types/index.d.ts`.
+4. Run `claude plugin validate .`, bump `version` in `.claude-plugin/plugin.json`, add a `CHANGELOG.md` entry, commit, and tag a release.
+
 ## Development
 
 ```text
