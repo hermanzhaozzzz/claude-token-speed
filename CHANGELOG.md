@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3 — 2026-11-11
+
+- Use the foreground text color for the speed number. Desktop text colors accept only theme keys; the available green (`planMode`) clashed with the teal curve.
+- Cache hit still shows `—` when the provider reports zero cache reads, matching Hermes. DeepSeek/FreeAPI currently reports `cache_read_input_tokens: 0`.
+
 ## 1.0.2 — 2026-11-11
 
 - Use the theme's `planMode` teal for the speed number; desktop text colors accept theme keys rather than raw hex.

@@ -422,7 +422,7 @@ export const register: Register = on => {
       const { Box, Text } = $.ui.resolve(e)
       return (
         <Box width="100%" justifyContent="flex-end" alignItems="center" gap="sm">
-          <Text color="planMode" dimColor={!s.isActive}>⚡ {speedText} t/s</Text>
+          <Text color="text" dimColor={!s.isActive}>⚡ {speedText} t/s</Text>
           <Text dimColor>{blockSpark(s.history)}</Text>
           <Text dimColor>◎ {cacheText}</Text>
           <Text dimColor>[{ctxBar}] {ctxText}</Text>
@@ -434,7 +434,7 @@ export const register: Register = on => {
     const { Box, Text, Svg } = $.ui.resolve(e)
     return (
       <Box width="100%" justifyContent="flex-end" alignItems="center" gap="sm">
-        <Text color="planMode" dimColor={!s.isActive}>⚡ {speedText} t/s</Text>
+        <Text color="text" dimColor={!s.isActive}>⚡ {speedText} t/s</Text>
         <Svg
           source={renderSvg(s.history, s.isActive)}
           alt={`Token speed over the last 3 minutes; current ${speedText} tokens per second`}
