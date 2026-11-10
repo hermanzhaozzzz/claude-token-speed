@@ -1,0 +1,6 @@
+{
+  "name": "claude-token-speed",
+  "owner": { "name": "Huanan Herman Zhao" },
+  "description": "Live token speed and session telemetry above the prompt for Claude Code.",
+  "plugins": [{ "name": "token-speed", "source": "./" }]
+}

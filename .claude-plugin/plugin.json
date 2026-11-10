@@ -1,0 +1,14 @@
+{
+  "name": "token-speed",
+  "version": "1.0.0",
+  "description": "Live token speed, 3-minute history, cache hit rate, context usage and turn timer above the prompt.",
+  "author": {
+    "name": "Huanan Herman Zhao",
+    "url": "https://github.com/hermanzhaozzzz"
+  },
+  "license": "MIT",
+  "icon": "./assets/icon.png",
+  "homepage": "https://github.com/hermanzhaozzzz/claude-token-speed",
+  "repository": "https://github.com/hermanzhaozzzz/claude-token-speed",
+  "types": "./types/index.d.ts"
+}
