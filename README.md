@@ -93,7 +93,7 @@ Useful constants at the top of `hooks/register.tsx`:
 
 | Constant | Default | Purpose |
 |---|---|---|
-| `ACCENT` | `#3AA99A` | Teal used by the number, curve, gradient and endpoint. |
+| `ACCENT` | `#3AA99A` | Teal used by the curve, gradient and endpoint. The number uses the theme's `planMode` teal. |
 | `WINDOW_MS` | `3000` | Live estimate window before the first call completes. |
 | `HISTORY_MAX` | `180` | Chart samples; 180 × 1 s = 3 minutes. |
 | chart ceiling | adaptive | Starts at 100 t/s and grows to the recent peak in 50 t/s steps. |
