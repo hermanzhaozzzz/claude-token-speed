@@ -390,7 +390,7 @@ async function observe($: EngineInterface, chunk: TurnStepChunk): Promise<void> 
 
 async function cleanImages($: EngineInterface, surface: string, managed: boolean): Promise<void> {
   if (surface !== 'terminal' && !managed) {
-    await $.ui.toast('桌面端的内置 guard 会跳过本地清图，按钮在这里不会生效。请在终端使用，或安装机器级 managed 版本（需要管理员授权）。')
+    await $.ui.toast('桌面端的内置 guard 会跳过本地清图。请在终端使用；或安装机器级 managed 版本，装完卸载 user 插件（需要管理员授权）。')
     return
   }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.4 — 2026-11-11
+
+- The desktop warning now tells users to uninstall the user-scope plugin after a machine-level managed install; the README documents the cleanup order and the same-name lock.
+
 ## 1.2.3 — 2026-11-11
 
 - In Claude Desktop, a normal user install now explains the guard limitation when 清图 is clicked instead of running `/compact`; the terminal and the managed copy still clean directly.
