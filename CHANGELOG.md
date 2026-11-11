@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.8 — 2026-11-11
+
+- Fix the desktop setup restarting Claude in a loop: `launchctl submit` re-runs its job on a timer, so the installer exited and reopened the app every ten seconds. It now starts once through perl `fork` + `setsid`, which survives the app quitting without repeating.
+- The setup script is now idempotent: if the managed copy already matches the plugin's version it exits without quitting Claude, holds a lock against overlapping runs, only quits and reopens the app when it was running, and treats a dismissed admin dialog (`-128`) as cancelled rather than failed.
+- Managed installs are detected by the `token-speed-local` path as well, so the cache copy also cleans directly instead of offering the setup pane again.
+
 ## 1.2.7 — 2026-11-11
 
 - The desktop button now opens a setup pane instead of a toast. **安装并重启** quits Claude first, then asks for the admin password, installs the managed copy from the currently installed plugin, removes the user-scope plugin, and reopens Claude. The install runs detached through `launchctl`, so quitting the app cannot kill it.

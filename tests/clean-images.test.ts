@@ -294,7 +294,7 @@ test('the clean button opens the desktop setup pane', async ($, on) => {
   await ui.unmount()
 })
 
-test('the setup pane starts the detached installer', async ($, on) => {
+test('the setup pane starts a one-shot detached installer', async ($, on) => {
   const runs: string[][] = []
   let started!: () => void
   const submitted = new Promise<void>(resolve => {
@@ -302,7 +302,7 @@ test('the setup pane starts the detached installer', async ($, on) => {
   })
   on('process.run', ($hook, e) => {
     runs.push([...e.argv])
-    if (e.argv[1] === 'submit') started()
+    started()
     return { value: { exitCode: 0, stdout: '', stderr: '' } }
   })
   on('env.get', () => ({ value: 'tester' }))
@@ -328,10 +328,11 @@ test('the setup pane starts the detached installer', async ($, on) => {
   await pane.press({ key: '安装并重启' })
   await submitted
 
-  const submit = (runs.find(argv => argv[1] === 'submit') ?? []).join(' ')
-  expect(submit).toContain('launchctl submit')
-  expect(submit).toContain('/bin/bash')
-  expect(submit).toContain('scripts/setup-from-app.sh')
-  expect(submit).toContain('tester')
+  const run = (runs.find(argv => argv[0] === '/usr/bin/perl') ?? []).join(' ')
+  expect(run).toContain('POSIX::setsid')
+  expect(run).toContain('/bin/bash')
+  expect(run).toContain('scripts/setup-from-app.sh')
+  expect(run).toContain('tester')
+  expect(runs.some(argv => argv[0] === 'launchctl')).toBe(false)
   await pane.unmount()
 })

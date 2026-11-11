@@ -19,8 +19,8 @@ const PAD_RIGHT = 6
 const PAD_Y = 2
 const MANAGED_ROOT = '/Library/Application Support/ClaudeCode/token-speed-market/plugin'
 const SETUP_PANE = 'token-speed-setup'
-const SETUP_JOB = 'com.hermanzhaozzzz.token-speed-setup'
 const SETUP_STATUS = '/tmp/token-speed-setup.status'
+const DETACH = 'my $p = fork; exit 0 if $p; POSIX::setsid(); exec { $ARGV[0] } @ARGV; exit 127'
 
 const BLOCKS = '▁▂▃▄▅▆▇█'
 
@@ -136,6 +136,11 @@ function liveSpeed(now: number): number | null {
 function contextBar(percent: number | null): string {
   const filled = percent === null ? 0 : Math.max(0, Math.min(10, Math.round((percent / 100) * 10)))
   return '█'.repeat(filled) + '░'.repeat(10 - filled)
+}
+
+function isManagedInstall(root: string): boolean {
+  const path = root.replace(/\/+$/, '')
+  return path === MANAGED_ROOT || path.includes('/token-speed-local/')
 }
 
 function formatTime(sec: number): string {
@@ -442,17 +447,13 @@ async function startDesktopSetup($: EngineInterface): Promise<void> {
 
   const root = $.plugin.root.replace(/\/+$/, '')
   try {
-    await $.process.run(['launchctl', 'remove', SETUP_JOB]).catch(() => undefined)
+    // launchctl submit re-runs the job on a timer, which quit Claude in a loop;
+    // fork + setsid detaches once and survives the app quitting.
     const result = await $.process.run([
-      'launchctl',
-      'submit',
-      '-l',
-      SETUP_JOB,
-      '-o',
-      '/tmp/token-speed-setup.log',
+      '/usr/bin/perl',
+      '-MPOSIX',
       '-e',
-      '/tmp/token-speed-setup.log',
-      '--',
+      DETACH,
       '/bin/bash',
       `${root}/scripts/setup-from-app.sh`,
       root,
@@ -616,7 +617,7 @@ export const register: Register = on => {
     if (e.props.hasSurvey) return next(e)
     const s = await read($, snap)
     if (s.version !== 1 || !s.hasData) return next(e)
-    const managed = $.plugin.root.replace(/\/+$/, '') === MANAGED_ROOT
+    const managed = isManagedInstall($.plugin.root)
 
     const speedText = s.speed === null ? '—' : s.speed.toFixed(1)
     const peakText = s.percentOfPeak === null || s.peak60m === null
