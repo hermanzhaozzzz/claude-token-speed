@@ -398,8 +398,9 @@ async function cleanImages($: EngineInterface, surface: string, managed: boolean
     } catch {
       // clipboard unavailable
     }
+    await $.ui.log(DESKTOP_SETUP_COMMAND)
     await $.ui.toast(
-      `桌面端的内置 guard 会跳过本地清图。${copied ? '已复制' : '请复制'}一键安装命令，粘贴到终端运行：\n\n${DESKTOP_SETUP_COMMAND}\n它会安装 managed 副本、卸载 user 插件并重启 Claude。`,
+      `桌面端的内置 guard 会跳过本地清图。${copied ? '命令已复制到剪贴板' : '请复制上面那行命令'}，粘贴到终端运行；它会安装 managed 副本、卸载 user 插件并重启 Claude。`,
     )
     return
   }

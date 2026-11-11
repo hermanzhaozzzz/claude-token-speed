@@ -277,6 +277,11 @@ test('the clean button offers the one-command desktop setup', async ($, on) => {
       return { value: undefined }
     })
   })
+  let logged = ''
+  on('ui.log', ($hook, e) => {
+    logged = e.text
+    return { value: undefined }
+  })
   let commands = 0
   on('command.run', () => {
     commands += 1
@@ -293,7 +298,8 @@ test('the clean button offers the one-command desktop setup', async ($, on) => {
   })
   await ui.press({ key: 'clean-images' })
   await toasted
-  expect(toast).toContain('install-managed.sh')
+  expect(logged).toContain('install-managed.sh')
+  expect(toast).toContain('guard')
   expect(commands).toBe(0)
   await ui.unmount()
 })

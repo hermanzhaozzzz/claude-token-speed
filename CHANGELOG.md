@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.6 — 2026-11-11
+
+- The desktop warning now puts the installer command on its own transcript line (and copies it), so it is easy to select and paste.
+
 ## 1.2.5 — 2026-11-11
 
 - The desktop warning now shows and copies one command; that command installs the managed copy, removes the user-scope plugin and marketplace, and restarts Claude.
