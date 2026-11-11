@@ -1,6 +1,6 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.2.2-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.2.3-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
@@ -72,13 +72,13 @@ The **⌫ 清图** button at the right end of the band handles that:
 
 The button triggers the engine's compact event, but the plugin intercepts it: **no model call and no summarization happen**. The conversation is not condensed — only older tool-result screenshots are removed, and the first message, the newest 8 messages, assistant thinking, and user prompts stay whole. The transcript still shows the engine's “Compacted” notice because that is the event the button uses; it does not mean the context was summarized. Typing `/compact` yourself is different: that request is not intercepted and runs the normal model summarization, which can still fail on an oversized session.
 
-In Claude Desktop the built-in security guard skips a user-installed mod's `session.compact` hook, so the button works in the terminal; the desktop needs a machine-specific managed install, which is not part of the normal plugin install.
+In Claude Desktop the built-in security guard skips a user-installed mod's `session.compact` hook, so the button works in the terminal; the desktop needs a machine-specific managed install, which is not part of the normal plugin install. Clicking the button in the desktop shows this warning instead of running the cleanup.
 
 ## Compatibility
 
 | Plugin | Claude Code / Desktop | Status |
 |---|---|---|
-| 1.2.2 | 2.1.322 desktop (plugin API 2.1.321) | Validated |
+| 1.2.3 | 2.1.322 desktop (plugin API 2.1.321) | Validated |
 
 This plugin uses the Claude Code **function-hooks plugin API**, which is early access and may change between releases. The repository includes a scheduled GitHub Action that runs `claude plugin validate .` against the latest Claude Code release every week, so an API change surfaces as a failed workflow instead of silently breaking the band.
 

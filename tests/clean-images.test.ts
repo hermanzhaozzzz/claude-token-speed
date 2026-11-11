@@ -267,3 +267,33 @@ test('the clean button prunes the conversation through session.compact', async (
   release()
   await ui.unmount()
 })
+
+test('the clean button explains the desktop guard instead of running compact', async ($, on) => {
+  let toast = ''
+  const toasted = new Promise<void>(resolve => {
+    on('ui.toast', ($hook, e) => {
+      toast = e.text
+      resolve()
+      return { value: undefined }
+    })
+  })
+  let commands = 0
+  on('command.run', () => {
+    commands += 1
+    return { text: '' }
+  })
+  baseStubs(on)
+  await startSession($, false)
+
+  const ui = await $.ui.mount({
+    plugin: 'token-speed',
+    surface: 'desktop',
+    component: 'AbovePrompt',
+    props: BAND,
+  })
+  await ui.press({ key: 'clean-images' })
+  await toasted
+  expect(toast).toContain('guard')
+  expect(commands).toBe(0)
+  await ui.unmount()
+})

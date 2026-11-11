@@ -17,6 +17,7 @@ const CHART_X = 158
 const PAD_X = 2
 const PAD_RIGHT = 6
 const PAD_Y = 2
+const MANAGED_ROOT = '/Library/Application Support/ClaudeCode/token-speed-market/plugin'
 
 const BLOCKS = '▁▂▃▄▅▆▇█'
 
@@ -387,7 +388,12 @@ async function observe($: EngineInterface, chunk: TurnStepChunk): Promise<void> 
   }
 }
 
-async function cleanImages($: EngineInterface): Promise<void> {
+async function cleanImages($: EngineInterface, surface: string, managed: boolean): Promise<void> {
+  if (surface !== 'terminal' && !managed) {
+    await $.ui.toast('桌面端的内置 guard 会跳过本地清图，按钮在这里不会生效。请在终端使用，或安装机器级 managed 版本（需要管理员授权）。')
+    return
+  }
+
   const state = await read($, snap)
   if (state.isActive) {
     await $.ui.toast('等本轮结束后再清理')
@@ -530,6 +536,7 @@ export const register: Register = on => {
     if (e.props.hasSurvey) return next(e)
     const s = await read($, snap)
     if (s.version !== 1 || !s.hasData) return next(e)
+    const managed = $.plugin.root.replace(/\/+$/, '') === MANAGED_ROOT
 
     const speedText = s.speed === null ? '—' : s.speed.toFixed(1)
     const peakText = s.percentOfPeak === null || s.peak60m === null
@@ -553,7 +560,7 @@ export const register: Register = on => {
           <Text dimColor>{timerText}</Text>
           <Text dimColor>·</Text>
           <Box key="clean-hover">
-            <Button key="clean-images" label="⌫ 清图" plain dimColor hover={{ color: ACCENT }} onPress={() => { void cleanImages($) }} />
+            <Button key="clean-images" label="⌫ 清图" plain dimColor hover={{ color: ACCENT }} onPress={() => { void cleanImages($, e.surface, managed) }} />
           </Box>
         </Box>
       )
@@ -583,7 +590,7 @@ export const register: Register = on => {
           <Text dimColor>{timerText}</Text>
           <Text dimColor>·</Text>
           <Box key="clean-hover">
-            <Button key="clean-images" label="⌫ 清图" plain dimColor hover={{ color: ACCENT }} onPress={() => { void cleanImages($) }} />
+            <Button key="clean-images" label="⌫ 清图" plain dimColor hover={{ color: ACCENT }} onPress={() => { void cleanImages($, e.surface, managed) }} />
           </Box>
         </Box>
       </Box>

@@ -1,6 +1,6 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.2.2-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.2.3-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
@@ -72,13 +72,13 @@ band 最右端的 **⌫ 清图** 按钮用来处理这种情况：
 
 按钮触发的是引擎的 compact 事件，但插件会把它截住：**不调用模型、不做总结**。对话并没有被压缩或概括——只去掉更早的 tool-result 截图；第一条、最近 8 条、assistant 的 thinking 和 user prompt 都原样保留。会话里仍会出现引擎的 “Compacted” 提示，因为按钮走的就是这个事件；它不代表上下文被总结了。手动敲 `/compact` 不一样：那次请求不会被截住，会走正常的模型总结，历史很大时仍然可能失败。
 
-Claude Desktop 的内置安全 guard 会跳过 user 作用域插件的 `session.compact` hook，所以按钮在终端里可用；桌面端需要一次机器级的 managed 安装，这不属于普通插件安装流程。
+Claude Desktop 的内置安全 guard 会跳过 user 作用域插件的 `session.compact` hook，所以按钮在终端里可用；桌面端需要一次机器级的 managed 安装，这不属于普通插件安装流程。桌面端点击按钮会显示这条提示，而不是执行清理。
 
 ## 兼容性
 
 | 插件 | Claude Code / Desktop | 状态 |
 |---|---|---|
-| 1.2.2 | 2.1.322 桌面版（插件 API 2.1.321） | 已验证 |
+| 1.2.3 | 2.1.322 桌面版（插件 API 2.1.321） | 已验证 |
 
 本插件使用 Claude Code 的 **function-hooks 插件 API**，该 API 目前是 early access，版本之间可能变化。仓库里有一个每周定时运行的 GitHub Action，用最新 Claude Code 执行 `claude plugin validate .`，API 变化会直接体现为失败的工作流。
 

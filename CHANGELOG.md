@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.3 — 2026-11-11
+
+- In Claude Desktop, a normal user install now explains the guard limitation when 清图 is clicked instead of running `/compact`; the terminal and the managed copy still clean directly.
+
 ## 1.2.2 — 2026-11-11
 
 - Keep thinking and user attachments such as PDFs when cleaning images: only older tool-result rows are rebuilt, so older assistant messages and user prompts stay whole.
