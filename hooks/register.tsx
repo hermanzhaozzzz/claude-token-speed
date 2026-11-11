@@ -5,12 +5,14 @@ import type { TokenSpeedSnapshot } from '../types'
 
 const ACCENT = '#3AA99A'
 const WINDOW_MS = 3000
+const PEAK_WINDOW_MS = 60 * 60 * 1000
+const PEAK_FLOOR = 100
 const TICK_MS = 1000
 const HISTORY_MAX = 180
 const CALLS_MAX = 10
 const CHART_W = 220
 const CHART_H = 24
-const CHART_X = 112
+const CHART_X = 158
 const SVG_W = CHART_X + CHART_W
 const PAD_X = 2
 const PAD_RIGHT = 6
@@ -24,6 +26,8 @@ const INITIAL: TokenSpeedSnapshot = {
   history: [],
   cacheHit: null,
   contextPercent: null,
+  peak60m: null,
+  percentOfPeak: null,
   elapsedSec: 0,
   isActive: false,
   hasData: false,
@@ -33,6 +37,7 @@ const snap = atom({ plugin: 'token-speed', key: 'snap' } as const, INITIAL)
 
 type Sample = { at: number; tokens: number }
 type Call = { tokens: number; ms: number }
+type PeakSample = { at: number; speed: number }
 
 let turnStartedAt = 0
 let lastTurnSec = 0
@@ -43,6 +48,9 @@ let history: number[] = []
 let cacheTotals = { input: 0, read: 0, write: 0 }
 let contextPercent: number | null = null
 let calls: Call[] = []
+let callsThisTurn = 0
+let peakSamples: PeakSample[] = []
+let peak60m = 0
 
 let stepStartedAt = 0
 let firstTokenAt = 0
@@ -72,6 +80,22 @@ function rollingSpeed(): number | null {
     ms += call.ms
   }
   return ms > 0 ? (tokens * 1000) / ms : null
+}
+
+function notePeak(now: number, value: number): void {
+  if (value > 0) peakSamples.push({ at: now, speed: value })
+  const cutoff = now - PEAK_WINDOW_MS
+  while (peakSamples.length > 0 && peakSamples[0]!.at < cutoff) peakSamples.shift()
+  let peak = 0
+  for (const sample of peakSamples) {
+    if (sample.speed > peak) peak = sample.speed
+  }
+  peak60m = peak
+}
+
+function peakPercent(): number | null {
+  if (peak60m <= 0) return null
+  return Math.max(0, Math.min(100, Math.round(((speed ?? 0) / peak60m) * 100)))
 }
 
 function cacheHitPercent(): number | null {
@@ -122,20 +146,16 @@ function padded(values: number[]): number[] {
     : values.slice(-HISTORY_MAX)
 }
 
-function chartCeiling(values: number[]): number {
-  let peak = 0
-  for (const v of values) {
-    if (v > peak) peak = v
-  }
-  if (peak <= 80) return 100
-  return Math.max(140, Math.ceil(peak / 50) * 50)
+function chartCeiling(): number {
+  if (peak60m <= PEAK_FLOOR) return PEAK_FLOOR
+  return Math.ceil(peak60m / 50) * 50
 }
 
 function blockSpark(values: number[]): string {
   const all = padded(values)
   const cols = 36
   const size = all.length / cols
-  const ceiling = chartCeiling(all)
+  const ceiling = chartCeiling()
   let out = ''
   for (let i = 0; i < cols; i += 1) {
     const a = Math.floor(i * size)
@@ -177,9 +197,9 @@ function escapeXml(value: string): string {
   }[ch] ?? ch))
 }
 
-function renderSvg(values: number[], active: boolean, speedText: string): string {
+function renderSvg(values: number[], active: boolean, speedText: string, peakText: string): string {
   const all = padded(values)
-  const ceiling = chartCeiling(all)
+  const ceiling = chartCeiling()
   const points = all.map((v, i) => ({
     x: PAD_X + (i / (all.length - 1)) * (CHART_W - PAD_X - PAD_RIGHT),
     y: PAD_Y + (1 - Math.max(0, Math.min(ceiling, v)) / ceiling) * (CHART_H - PAD_Y * 2),
@@ -201,7 +221,7 @@ function renderSvg(values: number[], active: boolean, speedText: string): string
 </linearGradient></defs>
 <g opacity="${opacity}">
 <path d="M5 2 L1 12 L4.5 12 L4 20 L10 9 L6.5 9 Z" fill="${ACCENT}"/>
-<text x="16" y="18" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="13" font-weight="650" fill="${ACCENT}">${escapeXml(speedText)}<tspan fill="#8a8a8e" font-weight="400"> t/s</tspan></text>
+<text x="16" y="18" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="13" font-weight="650" fill="${ACCENT}">${escapeXml(speedText)}<tspan fill="#8a8a8e" font-weight="400"> t/s</tspan>${peakText ? `<tspan fill="#8a8a8e" font-weight="400" font-size="11"> · ${escapeXml(peakText)}</tspan>` : ''}</text>
 </g>
 <g transform="translate(${CHART_X},0)">
 <path d="${area}" fill="url(#ts-area)"/>
@@ -223,6 +243,8 @@ async function writeSnapshot($: EngineInterface, now?: number): Promise<void> {
     history: history.slice(),
     cacheHit: cacheHitPercent(),
     contextPercent,
+    peak60m: peak60m > 0 ? peak60m : null,
+    percentOfPeak: peakPercent(),
     elapsedSec: elapsed,
     isActive,
     hasData,
@@ -239,9 +261,12 @@ async function tick($: EngineInterface): Promise<void> {
   history.push(active ? (live ?? 0) : 0)
   if (history.length > HISTORY_MAX) history.shift()
 
-  const rolling = rollingSpeed()
+  const rolling = callsThisTurn > 0 ? rollingSpeed() : null
   if (rolling !== null) speed = rolling
-  else if (active) speed = live
+  else if (active) speed = live ?? 0
+  else speed = 0
+
+  notePeak(now, active ? Math.max(speed ?? 0, live ?? 0) : 0)
 
   if (active) lastTurnSec = Math.max(0, Math.floor((now - turnStartedAt) / 1000))
 
@@ -282,6 +307,9 @@ function resetSession(): void {
   cacheTotals = { input: 0, read: 0, write: 0 }
   contextPercent = null
   calls = []
+  callsThisTurn = 0
+  peakSamples = []
+  peak60m = 0
   stepStartedAt = 0
   firstTokenAt = 0
   stepTokens = 0
@@ -299,6 +327,7 @@ async function observe($: EngineInterface, chunk: TurnStepChunk): Promise<void> 
 
     if (tokens > 0 && ms > 0) {
       calls.push({ tokens, ms })
+      callsThisTurn += 1
       if (calls.length > CALLS_MAX) calls.shift()
     }
     if (usage) {
@@ -308,12 +337,13 @@ async function observe($: EngineInterface, chunk: TurnStepChunk): Promise<void> 
     }
 
     stepTokens = tokens
-    const rolling = rollingSpeed()
+    const rolling = callsThisTurn > 0 ? rollingSpeed() : null
     if (rolling !== null) speed = rolling
     else if (firstTokenAt > 0) {
       const elapsed = now - firstTokenAt
       if (elapsed > 0) speed = (tokens * 1000) / elapsed
     }
+    notePeak(now, speed ?? 0)
 
     await writeSnapshot($, now)
     return
@@ -365,6 +395,8 @@ export const register: Register = on => {
     turnStartedAt = 0
     lastTurnSec = 0
     isActive = false
+    speed = 0
+    callsThisTurn = 0
     await writeSnapshot($)
     return next(e)
   })
@@ -376,6 +408,7 @@ export const register: Register = on => {
       lastTurnSec = 0
       isActive = true
       hasData = true
+      callsThisTurn = 0
       await writeSnapshot($, turnStartedAt)
     }
     return next(e)
@@ -410,8 +443,9 @@ export const register: Register = on => {
       turnStartedAt = 0
       isActive = false
 
-      const rolling = rollingSpeed()
-      if (rolling !== null) speed = rolling
+      if (speed !== null && speed > 0) notePeak(now, speed)
+      speed = 0
+      callsThisTurn = 0
 
       try {
         const usage = await $.session.usage()
@@ -431,6 +465,9 @@ export const register: Register = on => {
     if (s.version !== 1 || !s.hasData) return next(e)
 
     const speedText = s.speed === null ? '—' : s.speed.toFixed(1)
+    const peakText = s.percentOfPeak === null || s.peak60m === null
+      ? ''
+      : `${s.percentOfPeak}% of ${Math.round(s.peak60m)}`
     const cacheText = s.cacheHit === null ? '—' : `${Math.round(s.cacheHit)}%`
     const ctxText = s.contextPercent === null ? '—' : `${Math.round(s.contextPercent)}%`
     const ctxBar = contextBar(s.contextPercent)
@@ -440,7 +477,7 @@ export const register: Register = on => {
       const { Box, Text } = $.ui.resolve(e)
       return (
         <Box width="100%" justifyContent="flex-end" alignItems="center" gap="sm">
-          <Text color="text" dimColor={!s.isActive}>⚡ {speedText} t/s</Text>
+          <Text color="text" dimColor={!s.isActive}>⚡ {speedText} t/s{s.percentOfPeak === null ? '' : ` · ${s.percentOfPeak}%`}</Text>
           <Text dimColor>{blockSpark(s.history)}</Text>
           <Text dimColor>◎ {cacheText}</Text>
           <Text dimColor>[{ctxBar}] {ctxText}</Text>
@@ -453,8 +490,8 @@ export const register: Register = on => {
     return (
       <Box width="100%" justifyContent="flex-end" alignItems="center" gap="sm">
         <Svg
-          source={renderSvg(s.history, s.isActive, speedText)}
-          alt={`Token speed over the last 3 minutes; current ${speedText} tokens per second`}
+          source={renderSvg(s.history, s.isActive, speedText, peakText)}
+          alt={`Token speed over the last 3 minutes; current ${speedText} tokens per second${s.percentOfPeak === null ? '' : `, ${s.percentOfPeak}% of the 60-minute peak`}`}
           width={SVG_W}
           height={CHART_H}
         />

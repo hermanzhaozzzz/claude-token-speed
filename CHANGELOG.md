@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 — 2026-11-11
+
+- Zero the speed number when a turn ends; a new turn no longer inherits the previous turn's rolling reading.
+- Show the current speed as a share of the trailing 60-minute peak: `0.0 t/s · 0% of 472` on the desktop and a compact `· 0%` in the terminal fallback.
+- Pin the chart's y-axis to the 60-minute peak (rounded up to 50 t/s, minimum 100) instead of rescaling to the recent burst, so the 3-minute curve stays comparable across the hour.
+- Add `peak60m` and `percentOfPeak` to the snapshot contract.
+
 ## 1.0.4 — 2026-11-11
 
 - Draw the speed number inside the same SVG as the curve, so both use the exact teal. Desktop plugin text is otherwise forced to the theme's gold accent.
