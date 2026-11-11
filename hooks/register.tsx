@@ -545,11 +545,11 @@ export const register: Register = on => {
       const columns = typeof e.props.bodyColumns === 'number' ? e.props.bodyColumns : 120
       const sparkColumns = Math.max(12, Math.min(64, columns - 60))
       return (
-        <Box width="100%" justifyContent="flex-end" alignItems="center" gap="sm">
-          <Text color="text" dimColor={!s.isActive}>⚡ {speedText} t/s{s.percentOfPeak === null ? '' : ` · ${s.percentOfPeak}%`}</Text>
+        <Box width="100%" justifyContent="flex-end" alignItems="center" gap="sm" flexWrap="nowrap" overflow="hidden">
+          <Text color="text" dimColor={!s.isActive} wrap="truncate">⚡ {speedText} t/s{s.percentOfPeak === null ? '' : ` · ${s.percentOfPeak}%`}</Text>
           <Text dimColor>{blockSpark(s.history, sparkColumns)}</Text>
-          <Text dimColor>◎ {cacheText}</Text>
-          <Text dimColor>[{ctxBar}] {ctxText}</Text>
+          <Text dimColor wrap="truncate">◎ {cacheText}</Text>
+          <Text dimColor wrap="truncate">[{ctxBar}] {ctxText}</Text>
           <Text dimColor>{timerText}</Text>
           <Text dimColor>·</Text>
           <Box key="clean-hover">
@@ -561,26 +561,30 @@ export const register: Register = on => {
 
     const { Box, Text, Svg, Button } = $.ui.resolve(e)
     return (
-      <Box width="100%" alignItems="center" gap="sm">
-        <Svg
-          source={renderSpeedSvg(speedText, peakText)}
-          alt={`Current ${speedText} tokens per second${s.percentOfPeak === null ? '' : `, ${s.percentOfPeak}% of the 60-minute peak`}`}
-          width={CHART_X}
-          height={CHART_H}
-        />
-        <Box flexGrow={1} flexShrink={1}>
+      <Box width="100%" alignItems="center" gap="sm" flexWrap="nowrap" overflow="hidden">
+        <Box flexShrink={0}>
+          <Svg
+            source={renderSpeedSvg(speedText, peakText)}
+            alt={`Current ${speedText} tokens per second${s.percentOfPeak === null ? '' : `, ${s.percentOfPeak}% of the 60-minute peak`}`}
+            width={CHART_X}
+            height={CHART_H}
+          />
+        </Box>
+        <Box flexGrow={1} flexShrink={1} minWidth={0}>
           <Svg
             source={renderChartSvg(s.history, s.isActive)}
             alt="Token speed over the last 3 minutes"
             height={CHART_H}
           />
         </Box>
-        <Text dimColor>◎ {cacheText}</Text>
-        <Text dimColor>[{ctxBar}] {ctxText}</Text>
-        <Text dimColor>{timerText}</Text>
-        <Text dimColor>·</Text>
-        <Box key="clean-hover">
-          <Button key="clean-images" label="⌫ 清图" plain dimColor hover={{ color: ACCENT }} onPress={() => { void cleanImages($) }} />
+        <Box flexShrink={0} alignItems="center" gap="sm">
+          <Text dimColor wrap="truncate">◎ {cacheText}</Text>
+          <Text dimColor wrap="truncate">[{ctxBar}] {ctxText}</Text>
+          <Text dimColor>{timerText}</Text>
+          <Text dimColor>·</Text>
+          <Box key="clean-hover">
+            <Button key="clean-images" label="⌫ 清图" plain dimColor hover={{ color: ACCENT }} onPress={() => { void cleanImages($) }} />
+          </Box>
         </Box>
       </Box>
     )

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 — 2026-11-11
+
+- Keep the band on one row: the fixed segments no longer shrink, the chart takes the remaining width, and long text truncates instead of wrapping.
+
 ## 1.2.0 — 2026-11-11
 
 - Add a `⌫ 清图` button at the right end of the band, after the timer. It answers the engine's `session.compact` hook with a pruned message list, so it runs as a local compaction with no model request — it keeps working after a session's request body has exceeded a provider's size limit.

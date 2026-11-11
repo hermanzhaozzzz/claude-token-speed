@@ -1,6 +1,6 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.2.0-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.2.1-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
@@ -70,13 +70,13 @@ The **⌫ 清图** button at the right end of the band handles that:
 - While a turn runs, the button asks you to wait; when there is nothing older to clean, it says so.
 - The cleanup cannot be undone; read an image again if you need it back.
 
-The button runs the built-in `/compact` internally, so the transcript shows a compaction notice.
+The button runs the built-in `/compact` internally, so the transcript shows a compaction notice. In Claude Desktop the built-in security guard skips a user-installed mod's `session.compact` hook, so the button works in the terminal; the desktop needs a machine-specific managed install, which is not part of the normal plugin install.
 
 ## Compatibility
 
 | Plugin | Claude Code / Desktop | Status |
 |---|---|---|
-| 1.2.0 | 2.1.322 desktop (plugin API 2.1.321) | Validated |
+| 1.2.1 | 2.1.322 desktop (plugin API 2.1.321) | Validated |
 
 This plugin uses the Claude Code **function-hooks plugin API**, which is early access and may change between releases. The repository includes a scheduled GitHub Action that runs `claude plugin validate .` against the latest Claude Code release every week, so an API change surfaces as a failed workflow instead of silently breaking the band.
 
