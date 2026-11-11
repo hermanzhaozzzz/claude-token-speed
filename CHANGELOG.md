@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.2 — 2026-11-11
+
+- Keep thinking and user attachments such as PDFs when cleaning images: only older tool-result rows are rebuilt, so older assistant messages and user prompts stay whole.
+
 ## 1.2.1 — 2026-11-11
 
 - Keep the band on one row: the fixed segments no longer shrink, the chart takes the remaining width, and long text truncates instead of wrapping.

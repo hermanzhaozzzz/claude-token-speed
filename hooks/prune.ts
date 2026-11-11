@@ -3,12 +3,13 @@ import type { SessionMessage } from 'claude-code'
 export const KEEP_LAST = 8
 
 /**
- * Drops images from every message before the newest `keepLast` ones.
+ * Drops stored images from older tool-result rows.
  *
- * The engine keeps a message with its `handle` exactly as stored. Without its
- * handle it rebuilds the message from `role`, `text` and tool blocks, so image
- * blocks are not carried over. The stored `result` records can hold the same
- * bytes, so the rebuilt tool blocks keep only their ids and text.
+ * Assistant messages and user prompts are kept whole, with their handles, so
+ * thinking and attachments such as PDFs survive. Only an older user message
+ * that carries tool results is rebuilt: the engine rebuilds it from role,
+ * text and tool blocks, so the image bytes and the stored `result` records
+ * are not carried over.
  */
 export function pruneMessages(
   messages: readonly SessionMessage[],
@@ -38,25 +39,21 @@ export function pruneMessages(
       pruned.push(message)
       continue
     }
-    const toolUses = message.toolUses.map(use => ({
-      tool_use_id: use.tool_use_id,
-      tool: use.tool,
-      input: use.input,
-    }))
-    const toolResults = message.toolResults?.map(result => ({
-      tool_use_id: result.tool_use_id,
-      text: result.text,
-      isError: result.isError,
-    }))
-    const rebuilt: SessionMessage = {
-      role: message.role,
+    const results = message.toolResults
+    if (message.role !== 'user' || !results || results.length === 0) {
+      pruned.push(message)
+      continue
+    }
+    pruned.push({
+      role: 'user',
       text: message.text,
-      toolUses,
-      ...(toolResults ? { toolResults } : {}),
-    }
-    if (rebuilt.text !== '' || rebuilt.toolUses.length > 0 || (rebuilt.toolResults?.length ?? 0) > 0) {
-      pruned.push(rebuilt)
-    }
+      toolUses: [],
+      toolResults: results.map(result => ({
+        tool_use_id: result.tool_use_id,
+        text: result.text,
+        isError: result.isError,
+      })),
+    })
   }
 
   if (pruned[0]?.role === 'assistant') {

@@ -1,6 +1,6 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.2.1-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.2.2-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
@@ -65,8 +65,8 @@ Screenshots read into a session stay in its context as base64, and every request
 The **⌫ 清图** button at the right end of the band handles that:
 
 - It answers the engine's `session.compact` hook with a message list that has the images removed. That is a **local compaction: no model call and no request**, so it still works after the current request body is over the limit.
-- It keeps the first message and the newest 8 messages as they are; images in older messages are dropped, and the original image files are untouched.
-- Non-text blocks in those older messages (PDFs, thinking) are dropped too, as part of the same trade.
+- It keeps the first message, the newest 8 messages, and every older assistant message and user prompt as they are, so thinking and attachments such as PDFs survive.
+- Only older **tool-result** rows are rebuilt: that drops the stored screenshot bytes, and the original image files are untouched.
 - While a turn runs, the button asks you to wait; when there is nothing older to clean, it says so.
 - The cleanup cannot be undone; read an image again if you need it back.
 
@@ -76,7 +76,7 @@ The button runs the built-in `/compact` internally, so the transcript shows a co
 
 | Plugin | Claude Code / Desktop | Status |
 |---|---|---|
-| 1.2.1 | 2.1.322 desktop (plugin API 2.1.321) | Validated |
+| 1.2.2 | 2.1.322 desktop (plugin API 2.1.321) | Validated |
 
 This plugin uses the Claude Code **function-hooks plugin API**, which is early access and may change between releases. The repository includes a scheduled GitHub Action that runs `claude plugin validate .` against the latest Claude Code release every week, so an API change surfaces as a failed workflow instead of silently breaking the band.
 

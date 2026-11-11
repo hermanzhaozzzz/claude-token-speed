@@ -50,26 +50,39 @@ async function startSession($: Engine, active: boolean): Promise<void> {
   }
 }
 
-test('keeps the first message and the newest eight, rebuilding the rest', () => {
+test('keeps assistant messages and user prompts whole', () => {
   const messages = Array.from({ length: 12 }, (_, i) =>
     message(i % 2 === 0 ? 'user' : 'assistant', `m${i}`, { handle: `h${i}` }),
   )
   const pruned = pruneMessages(messages, 8)
-  expect(pruned).toHaveLength(12)
-  expect(handles(pruned)).toEqual([
-    'h0',
-    undefined,
-    undefined,
-    undefined,
-    'h4',
-    'h5',
-    'h6',
-    'h7',
-    'h8',
-    'h9',
-    'h10',
-    'h11',
-  ])
+  expect(handles(pruned)).toEqual(messages.map(item => item.handle))
+})
+
+test('rebuilds only older tool-result rows, dropping stored image records', () => {
+  const messages: SessionMessage[] = [
+    message('user', 'start', { handle: 'h0' }),
+    {
+      role: 'user',
+      text: '',
+      toolUses: [],
+      toolResults: [{
+        tool_use_id: 't1',
+        text: '',
+        isError: false,
+        result: { type: 'image', source: { data: 'AAAA' } },
+      }],
+      handle: 'h1',
+    },
+    message('assistant', 'thinking stays', { handle: 'h2' }),
+    message('user', 'a prompt with a PDF', { handle: 'h3' }),
+    ...Array.from({ length: 9 }, (_, i) => message('user', `u${i}`, { handle: `h${i + 4}` })),
+  ]
+  const pruned = pruneMessages(messages, KEEP_LAST)
+  expect(pruned[1]?.handle).toBeUndefined()
+  expect(pruned[1]?.toolResults?.[0]?.result).toBeUndefined()
+  expect(pruned[2]?.handle).toBe('h2')
+  expect(pruned[3]?.handle).toBe('h3')
+  expect(pruned).toHaveLength(messages.length)
 })
 
 test('never splits a tool_use from its tool_result', () => {
@@ -95,18 +108,22 @@ test('never splits a tool_use from its tool_result', () => {
   expect(pruned.at(-1)?.handle).toBe('h9')
 })
 
-test('drops rebuilt messages with nothing left to rebuild', () => {
+test('keeps an older empty tool-result row instead of dropping it', () => {
   const messages: SessionMessage[] = [
     message('user', 'start', { handle: 'h0' }),
-    message('user', '', { handle: 'h1' }),
+    {
+      role: 'user',
+      text: '',
+      toolUses: [],
+      toolResults: [{ tool_use_id: 't1', text: '', isError: false }],
+      handle: 'h1',
+    },
     ...Array.from({ length: 8 }, (_, i) => message('user', `u${i}`, { handle: `h${i + 2}` })),
   ]
   const pruned = pruneMessages(messages, KEEP_LAST)
-  expect(pruned).toHaveLength(9)
-  expect(pruned.some(item => item.handle === 'h1')).toBe(false)
-  expect(
-    pruned.every(item => item.text !== '' || item.toolUses.length > 0 || (item.toolResults?.length ?? 0) > 0),
-  ).toBe(true)
+  expect(pruned).toHaveLength(10)
+  expect(pruned[1]?.handle).toBeUndefined()
+  expect(pruned[1]?.toolResults).toHaveLength(1)
 })
 
 test('starts the rebuilt conversation with a user message', () => {
@@ -118,7 +135,7 @@ test('starts the rebuilt conversation with a user message', () => {
   expect(pruned[0]?.role).toBe('user')
 })
 
-test('drops stored tool records that can carry image bytes', () => {
+test('keeps the assistant message but drops stored image records from an older tool result', () => {
   const messages: SessionMessage[] = [
     message('user', 'start', { handle: 'h0' }),
     {
@@ -148,8 +165,8 @@ test('drops stored tool records that can carry image bytes', () => {
     ...Array.from({ length: 9 }, (_, i) => message('user', `u${i}`, { handle: `h${i + 3}` })),
   ]
   const pruned = pruneMessages(messages, KEEP_LAST)
-  expect(pruned[1]?.toolUses[0]?.result).toBeUndefined()
-  expect(pruned[1]?.toolUses[0]?.text).toBeUndefined()
+  expect(pruned[1]?.handle).toBe('h1')
+  expect(pruned[2]?.handle).toBeUndefined()
   expect(pruned[2]?.toolResults?.[0]?.result).toBeUndefined()
 })
 
@@ -221,7 +238,14 @@ test('the clean button prunes the conversation through session.compact', async (
 
   const messages: SessionMessage[] = [
     message('user', 'start', { handle: 'h0' }),
-    ...Array.from({ length: 10 }, (_, i) => message('user', `u${i}`, { handle: `h${i + 1}` })),
+    {
+      role: 'user',
+      text: '',
+      toolUses: [],
+      toolResults: [{ tool_use_id: 't1', text: '', isError: false }],
+      handle: 'h1',
+    },
+    ...Array.from({ length: 9 }, (_, i) => message('user', `u${i}`, { handle: `h${i + 2}` })),
   ]
 
   const ui = await $.ui.mount({
@@ -237,7 +261,7 @@ test('the clean button prunes the conversation through session.compact', async (
   expect(pruned?.length).toBe(11)
   expect(pruned?.[0]?.handle).toBe('h0')
   expect(pruned?.[1]?.handle).toBeUndefined()
-  expect(pruned?.[2]?.handle).toBeUndefined()
+  expect(pruned?.[2]?.handle).toBe('h2')
   expect(pruned?.at(-1)?.handle).toBe('h10')
 
   release()
