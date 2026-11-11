@@ -22,7 +22,7 @@ One compact row, right-aligned on the band above the input box:
 | `◎ 87%` | Session prompt-cache hit rate. Shows `—` until the provider reports cache reads. |
 | `[██████░░░░] 42%` | Context-window usage and percentage. Shows `—` until the first usage report. |
 | `01:23` | Current turn timer. Freezes at the final duration when the turn ends. |
-| ⌫ 清图 | A button at the right end of the band, after the timer. Drops images from older messages through a local compaction, for sessions that have outgrown the provider's request-body limit. |
+| ⌫ 清图 | A button at the right end of the band, after the timer. Removes images from older tool-result rows locally (no model call), for sessions that have outgrown the provider's request-body limit. |
 
 The row dims and the endpoint becomes hollow when the model is idle. It appears when the first turn starts and stays visible between turns, so you can compare the last few generations; the speed itself drops to `0.0 t/s` as soon as a turn ends.
 
@@ -70,7 +70,9 @@ The **⌫ 清图** button at the right end of the band handles that:
 - While a turn runs, the button asks you to wait; when there is nothing older to clean, it says so.
 - The cleanup cannot be undone; read an image again if you need it back.
 
-The button runs the built-in `/compact` internally, so the transcript shows a compaction notice. In Claude Desktop the built-in security guard skips a user-installed mod's `session.compact` hook, so the button works in the terminal; the desktop needs a machine-specific managed install, which is not part of the normal plugin install.
+The button triggers the engine's compact event, but the plugin intercepts it: **no model call and no summarization happen**. The conversation is not condensed — only older tool-result screenshots are removed, and the first message, the newest 8 messages, assistant thinking, and user prompts stay whole. The transcript still shows the engine's “Compacted” notice because that is the event the button uses; it does not mean the context was summarized. Typing `/compact` yourself is different: that request is not intercepted and runs the normal model summarization, which can still fail on an oversized session.
+
+In Claude Desktop the built-in security guard skips a user-installed mod's `session.compact` hook, so the button works in the terminal; the desktop needs a machine-specific managed install, which is not part of the normal plugin install.
 
 ## Compatibility
 
