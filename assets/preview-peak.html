@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>token-speed · 60 分钟峰值标定</title>
+<style>
+  :root {
+    --teal: #3AA99A;
+    --ink: #1d1d1f;
+    --muted: #6e6e73;
+    --faint: #8a8a8e;
+    --surface: #f3f3f5;
+    --line: #e3e3e8;
+    --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #fafafa;
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1000px; margin: 0 auto; padding: 44px 36px 80px; }
+  h1 { margin: 0 0 10px; font-size: 27px; line-height: 1.2; letter-spacing: -0.02em; font-weight: 700; }
+  .lede { margin: 0 0 26px; color: var(--muted); font-size: 14px; line-height: 1.65; max-width: 720px; }
+  .lede b { color: var(--ink); font-weight: 600; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 24px; }
+  .seg {
+    appearance: none; border: 1px solid var(--line); background: #fff; color: var(--muted);
+    font: inherit; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 999px;
+    cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+  }
+  .seg:hover { border-color: #cfcfd6; color: var(--ink); }
+  .seg[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .play { margin-left: 4px; border-style: dashed; }
+  .play[aria-pressed="true"] { background: #fff; border-color: var(--teal); color: var(--teal); }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    padding: 14px 16px 13px; margin: 0 0 14px;
+  }
+  .card-head { display: flex; align-items: baseline; gap: 10px; margin: 0 2px 9px; }
+  .tag { font-size: 12px; font-weight: 650; letter-spacing: .02em; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
+  .card.old .tag .dot { background: #b4b4bb; }
+  .card-head .sub { font-size: 12px; color: var(--faint); }
+  .note { margin: 9px 2px 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+  .note b { color: var(--ink); font-weight: 600; }
+  .note.warn b { color: #c2410c; }
+
+  .band {
+    display: flex; align-items: center; justify-content: flex-end; gap: 12px;
+    background: var(--surface); border: 1px solid #e7e7ec; border-radius: 12px;
+    padding: 9px 14px; min-height: 44px; overflow: hidden;
+  }
+  .band .spark { flex: 0 0 auto; display: block; }
+  .chip { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .chip.time { color: var(--faint); }
+
+  .calib { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 16px 16px 12px; margin-top: 24px; }
+  .calib-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 2px 4px; }
+  .calib h2 { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: -0.01em; }
+  .calib .hint { font-size: 11.5px; color: var(--faint); }
+  .strip-wrap { position: relative; margin-top: 8px; }
+  #strip { display: block; width: 100%; height: auto; }
+  .tip {
+    position: absolute; pointer-events: none; background: rgba(29,29,31,.92); color: #fff;
+    font-size: 11px; line-height: 1; padding: 6px 7px; border-radius: 6px; white-space: nowrap;
+    transform: translate(-50%, -130%); opacity: 0; transition: opacity .1s;
+  }
+  .tip.on { opacity: 1; }
+
+  .facts { margin: 26px 2px 0; display: grid; grid-template-columns: 190px 1fr; gap: 10px 18px; font-size: 13px; line-height: 1.6; }
+  .facts dt { color: var(--ink); font-weight: 600; }
+  .facts dd { margin: 0; color: var(--muted); }
+  .foot { margin-top: 26px; font-size: 11.5px; color: var(--faint); line-height: 1.6; }
+  code { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: .92em; background: #f1f1f4; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>token 速度 · 过去 60 分钟峰值标定</h1>
+  <p class="lede">
+    现在停工后读数仍停在最后一次滚动速度，曲线却已经归零。新方案把 <b>数字</b> 改成真实当前速度（停工即 <code>0.0 t/s</code>），
+    并加一个 <b>相对过去 60 分钟峰值</b> 的百分比；曲线纵轴也按这 60 分钟峰值固定，生成段不再各自缩放。
+  </p>
+
+  <div class="controls" role="group" aria-label="状态">
+    <button class="seg" data-state="active" aria-pressed="true">生成中</button>
+    <button class="seg" data-state="stopped" aria-pressed="false">刚停下</button>
+    <button class="seg" data-state="idle" aria-pressed="false">空闲 5 分钟</button>
+    <button class="seg play" id="play" aria-pressed="false">自动演示</button>
+  </div>
+
+  <section class="card old" aria-labelledby="old-tag">
+    <div class="card-head">
+      <span class="tag" id="old-tag"><span class="dot"></span>现在（旧）</span>
+      <span class="sub">最后一次滚动速度会一直留着</span>
+    </div>
+    <div class="band" id="band-old"></div>
+    <p class="note warn">停工后数字仍显示 <b>360.1 t/s</b>，但曲线和端点已经落到底线。这就是截图里的问题。</p>
+  </section>
+
+  <section class="card" aria-labelledby="a-tag">
+    <div class="card-head">
+      <span class="tag" id="a-tag"><span class="dot"></span>新 · A</span>
+      <span class="sub">只显示相对 60 分钟峰值的百分比</span>
+    </div>
+    <div class="band" id="band-a"></div>
+    <p class="note">百分比 = 当前速度 ÷ 过去 60 分钟峰值。峰值滑出窗口后，标定自动降到新的最高值。</p>
+  </section>
+
+  <section class="card" aria-labelledby="b-tag">
+    <div class="card-head">
+      <span class="tag" id="b-tag"><span class="dot"></span>新 · B</span>
+      <span class="sub">百分比后面带上峰值绝对值</span>
+    </div>
+    <div class="band" id="band-b"></div>
+    <p class="note">多出的 <code>of 472</code> 是 60 分钟峰值，方便判断当下的百分比意味着多大的吞吐。</p>
+  </section>
+
+  <section class="calib" aria-labelledby="calib-title">
+    <div class="calib-head">
+      <h2 id="calib-title">标定参考 · 过去 60 分钟</h2>
+      <span class="hint">仅用于预览，不在状态栏里出现</span>
+    </div>
+    <div class="strip-wrap">
+      <svg id="strip" viewBox="0 0 880 92" role="img" aria-label="过去 60 分钟的 token 速度，峰值 472 t/s"></svg>
+      <div class="tip" id="tip"></div>
+    </div>
+  </section>
+
+  <dl class="facts">
+    <dt>数字</dt>
+    <dd>当前速度。生成中取实时值，调用结束后切到最近 ≤10 次调用的滚动值；没有生成时归零。</dd>
+    <dt>百分比</dt>
+    <dd>当前速度 / 过去 60 分钟峰值，封顶 100%。峰值按 1 秒采样、60 分钟滑动窗口计算，旧峰值滑出后自动失效。</dd>
+    <dt>曲线</dt>
+    <dd>仍是最近 180 秒；纵轴改为按 60 分钟峰值（向上取整到 50）固定，空闲秒停在基线。</dd>
+    <dt>空闲</dt>
+    <dd>数字 <code>0.0 t/s</code>、百分比 <code>0%</code>，整行变暗、端点变空心，和现在一样保留最近几分钟的曲线。</dd>
+  </dl>
+
+  <p class="foot">模拟数据：峰值 472 t/s，上下文 2%，缓存命中 87%，本轮 00:13。颜色、字号与主仓库现有状态栏一致。</p>
+</div>
+
+<script>
+(function () {
+  var ACCENT = '#3AA99A';
+  var CHART_W = 220, CHART_H = 24, CHART_X = 158, SVG_W = CHART_X + CHART_W;
+  var PAD_X = 2, PAD_RIGHT = 6, PAD_Y = 2;
+
+  /* ---------- deterministic 65-minute session ---------- */
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  var rnd = mulberry32(20261111);
+  var LEN = 3900;
+  var series = new Array(LEN).fill(0);
+
+  function burst(start, end, base, amp) {
+    for (var t = start; t < end; t++) {
+      var ramp = Math.min(1, (t - start) / 12);
+      var tail = Math.min(1, (end - t) / 6);
+      var wave = 0.86 + 0.14 * Math.sin(t / 7.3) + 0.06 * Math.sin(t / 2.1);
+      var v = (base + (rnd() - 0.5) * amp) * ramp * tail * wave;
+      series[t] = Math.max(0, Math.min(471.9, v));
+    }
+  }
+  burst(240, 320, 300, 70);
+  burst(760, 790, 180, 50);
+  burst(1180, 1250, 250, 80);
+  burst(1500, 1600, 330, 60);
+  burst(2120, 2180, 210, 60);
+  burst(2400, 2530, 440, 60);
+  burst(2960, 3030, 240, 70);
+  burst(3300, 3350, 200, 50);
+  burst(3400, 3450, 320, 60);
+  burst(3560, 3596, 335, 55);
+  series[2470] = 472;
+  series[3575] = 360.1;
+
+  var STATES = {
+    active:  { cursor: 3576, active: true,  lastRolling: 360.1 },
+    stopped: { cursor: 3600, active: false, lastRolling: 360.1 },
+    idle:    { cursor: 3900, active: false, lastRolling: 360.1 }
+  };
+  var current = 'active';
+
+  function histAt(cursor) {
+    var out = [];
+    for (var t = cursor - 180; t < cursor; t++) out.push(t >= 0 ? series[t] : 0);
+    return out;
+  }
+  function peakAt(cursor) {
+    var p = 0, start = Math.max(0, cursor - 3600);
+    for (var t = start; t < cursor; t++) if (series[t] > p) p = series[t];
+    return p;
+  }
+  function speedAt(cursor) {
+    return series[Math.max(0, cursor - 1)] || 0;
+  }
+
+  /* ---------- chart helpers (mirror hooks/register.tsx) ---------- */
+  function oldCeiling(values) {
+    var peak = 0;
+    for (var i = 0; i < values.length; i++) if (values[i] > peak) peak = values[i];
+    if (peak <= 80) return 100;
+    return Math.max(140, Math.ceil(peak / 50) * 50);
+  }
+  function peakCeiling(peak) {
+    return Math.max(100, Math.ceil(peak / 50) * 50);
+  }
+  function smoothPath(pts) {
+    if (!pts.length) return '';
+    var d = 'M ' + pts[0].x.toFixed(2) + ' ' + pts[0].y.toFixed(2);
+    for (var i = 0; i < pts.length - 1; i++) {
+      var p1 = pts[i], p2 = pts[i + 1];
+      var p0 = pts[i - 1] || p1, p3 = pts[i + 2] || p2;
+      var c1x = p1.x + (p2.x - p0.x) / 6;
+      var c1y = Math.max(PAD_Y, Math.min(CHART_H - PAD_Y, p1.y + (p2.y - p0.y) / 6));
+      var c2x = p2.x - (p3.x - p1.x) / 6;
+      var c2y = Math.max(PAD_Y, Math.min(CHART_H - PAD_Y, p2.y - (p3.y - p1.y) / 6));
+      d += ' C ' + c1x.toFixed(2) + ' ' + c1y.toFixed(2) + ', ' + c2x.toFixed(2) + ' ' + c2y.toFixed(2) + ', ' + p2.x.toFixed(2) + ' ' + p2.y.toFixed(2);
+    }
+    return d;
+  }
+  function sparkSvg(opts) {
+    var hist = opts.hist, ceiling = opts.ceiling;
+    var n = hist.length;
+    var pts = hist.map(function (v, i) {
+      return {
+        x: PAD_X + (i / (n - 1)) * (CHART_W - PAD_X - PAD_RIGHT),
+        y: PAD_Y + (1 - Math.max(0, Math.min(ceiling, v)) / ceiling) * (CHART_H - PAD_Y * 2)
+      };
+    });
+    var line = smoothPath(pts);
+    var area = line + ' L ' + (CHART_W - PAD_RIGHT).toFixed(2) + ' ' + (CHART_H - PAD_Y) + ' L ' + PAD_X + ' ' + (CHART_H - PAD_Y) + ' Z';
+    var last = pts[pts.length - 1];
+    var opacity = opts.active ? 1 : 0.55;
+    var fillOpacity = opts.active ? 0.22 : 0.12;
+    var dot = opts.active
+      ? '<circle cx="' + last.x.toFixed(2) + '" cy="' + last.y.toFixed(2) + '" r="1.3" fill="' + ACCENT + '"/>'
+      : '';
+    var pct = opts.pctText
+      ? '<tspan fill="#8a8a8e" font-weight="400" font-size="11"> · ' + opts.pctText + '</tspan>'
+      : '';
+    var label = opts.alt;
+
+    return '<svg class="spark" xmlns="http://www.w3.org/2000/svg" width="' + SVG_W + '" height="' + CHART_H +
+      '" viewBox="0 0 ' + SVG_W + ' ' + CHART_H + '" role="img" aria-label="' + label + '">' +
+      '<defs><linearGradient id="g' + opts.key + '" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="' + ACCENT + '" stop-opacity="' + fillOpacity + '"/>' +
+      '<stop offset="100%" stop-color="' + ACCENT + '" stop-opacity="0"/>' +
+      '</linearGradient></defs>' +
+      '<g opacity="' + opacity + '">' +
+      '<path d="M5 2 L1 12 L4.5 12 L4 20 L10 9 L6.5 9 Z" fill="' + ACCENT + '"/>' +
+      '<text x="16" y="18" font-family="-apple-system, BlinkMacSystemFont, \'SF Pro Text\', \'PingFang SC\', sans-serif" font-size="13" font-weight="650" fill="' + ACCENT + '">' +
+      opts.speedText + '<tspan fill="#8a8a8e" font-weight="400"> t/s</tspan>' + pct + '</text>' +
+      '</g>' +
+      '<g transform="translate(' + CHART_X + ',0)">' +
+      '<path d="' + area + '" fill="url(#g' + opts.key + ')"/>' +
+      '<path d="' + line + '" fill="none" stroke="' + ACCENT + '" stroke-opacity="' + opacity + '" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<circle cx="' + last.x.toFixed(2) + '" cy="' + last.y.toFixed(2) + '" r="3.2" fill="none" stroke="' + ACCENT + '" stroke-opacity="' + opacity + '" stroke-width="1.4"/>' +
+      dot +
+      '</g></svg>';
+  }
+
+  function chips() {
+    return '<span class="chip">◎ 87%</span><span class="chip">[░░░░░░░░░░] 2%</span><span class="chip time">00:13</span>';
+  }
+
+  /* ---------- render bands ---------- */
+  function renderBands() {
+    var st = STATES[current];
+    var hist = histAt(st.cursor);
+    var peak = peakAt(st.cursor);
+    var live = st.active ? speedAt(st.cursor) : 0;
+    var pct = peak > 0 ? Math.min(100, Math.round((live / peak) * 100)) : null;
+    var speedText = live.toFixed(1);
+    var peakText = Math.round(peak);
+    var altBase = 'current ' + speedText + ' tokens per second';
+
+    document.getElementById('band-old').innerHTML = sparkSvg({
+      key: 'old', hist: hist, active: st.active,
+      speedText: st.lastRolling.toFixed(1), pctText: '',
+      ceiling: oldCeiling(hist), alt: altBase + '; last rolling speed shown while idle'
+    }) + chips();
+
+    document.getElementById('band-a').innerHTML = sparkSvg({
+      key: 'a', hist: hist, active: st.active,
+      speedText: speedText, pctText: pct === null ? '' : pct + '%',
+      ceiling: peakCeiling(peak),
+      alt: altBase + '; ' + (pct === null ? 'no peak yet' : pct + ' percent of the 60-minute peak of ' + peakText)
+    }) + chips();
+
+    document.getElementById('band-b').innerHTML = sparkSvg({
+      key: 'b', hist: hist, active: st.active,
+      speedText: speedText, pctText: pct === null ? '' : pct + '% of ' + peakText,
+      ceiling: peakCeiling(peak),
+      alt: altBase + '; ' + (pct === null ? 'no peak yet' : pct + ' percent of the 60-minute peak of ' + peakText)
+    }) + chips();
+
+    renderStrip(st.cursor, peak);
+  }
+
+  /* ---------- 60-minute calibration strip ---------- */
+  var STRIP_W = 880, STRIP_H = 92, STRIP_L = 44, STRIP_R = 8, STRIP_T = 16, STRIP_B = 22;
+  var stripState = null;
+
+  function downsample(cursor) {
+    var start = Math.max(0, cursor - 3600);
+    var win = series.slice(start, cursor);
+    var cols = 300;
+    var bucket = win.length / cols;
+    var vals = [];
+    for (var i = 0; i < cols; i++) {
+      var a = Math.floor(i * bucket), b = Math.max(a + 1, Math.floor((i + 1) * bucket));
+      var m = 0;
+      for (var j = a; j < b; j++) if ((win[j] || 0) > m) m = win[j];
+      vals.push(m);
+    }
+    return { start: start, end: cursor, vals: vals };
+  }
+
+  function renderStrip(cursor, peak) {
+    var d = downsample(cursor);
+    var vals = d.vals;
+    var ceiling = peakCeiling(peak);
+    var n = vals.length;
+    var x0 = STRIP_L, x1 = STRIP_W - STRIP_R;
+    var y0 = STRIP_T, y1 = STRIP_H - STRIP_B;
+    var px = function (i) { return x0 + (i / (n - 1)) * (x1 - x0); };
+    var py = function (v) { return y0 + (1 - Math.min(ceiling, v) / ceiling) * (y1 - y0); };
+
+    var line = 'M ' + px(0).toFixed(2) + ' ' + py(vals[0]).toFixed(2);
+    for (var i = 1; i < n; i++) line += ' L ' + px(i).toFixed(2) + ' ' + py(vals[i]).toFixed(2);
+    var area = line + ' L ' + x1.toFixed(2) + ' ' + y1 + ' L ' + x0 + ' ' + y1 + ' Z';
+
+    var peakIdx = 0;
+    for (var k = 0; k < n; k++) if (vals[k] > vals[peakIdx]) peakIdx = k;
+    var pkx = px(peakIdx), pky = py(vals[peakIdx]);
+    var labelY = Math.max(9, pky - 7);
+
+    var grid = '';
+    var steps = [0, 0.5, 1];
+    for (var s = 0; s < steps.length; s++) {
+      var gy = y0 + (1 - steps[s]) * (y1 - y0);
+      grid += '<line x1="' + x0 + '" y1="' + gy.toFixed(2) + '" x2="' + x1 + '" y2="' + gy.toFixed(2) +
+        '" stroke="#ececf0" stroke-width="1"' + (steps[s] === 0 ? '' : ' stroke-dasharray="3 4"') + '/>';
+      grid += '<text x="' + (x0 - 6) + '" y="' + (gy + 3.5).toFixed(2) + '" text-anchor="end" font-size="9.5" fill="#b0b0b6">' +
+        Math.round(ceiling * steps[s]) + '</text>';
+    }
+
+    var svg = '<svg id="strip" class="strip" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + STRIP_W + ' ' + STRIP_H + '">' +
+      '<g font-family="-apple-system, BlinkMacSystemFont, \'SF Pro Text\', \'PingFang SC\', sans-serif">' +
+      grid +
+      '<path d="' + area + '" fill="' + ACCENT + '" fill-opacity=".10"/>' +
+      '<path d="' + line + '" fill="none" stroke="' + ACCENT + '" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>' +
+      '<line x1="' + x1.toFixed(2) + '" y1="' + y0 + '" x2="' + x1.toFixed(2) + '" y2="' + y1 +
+        '" stroke="#8a8a8e" stroke-width="1" stroke-dasharray="3 3" opacity=".55"/>' +
+      '<circle cx="' + pkx.toFixed(2) + '" cy="' + pky.toFixed(2) + '" r="3" fill="#fff" stroke="' + ACCENT + '" stroke-width="1.5"/>' +
+      '<text x="' + pkx.toFixed(2) + '" y="' + labelY.toFixed(2) + '" text-anchor="middle" font-size="10.5" font-weight="650" fill="#3AA99A">' +
+        Math.round(peak) + ' t/s 峰值</text>' +
+      '<text x="' + x0 + '" y="' + (STRIP_H - 6) + '" font-size="10" fill="#b0b0b6">60 分钟前</text>' +
+      '<text x="' + x1 + '" y="' + (STRIP_H - 6) + '" text-anchor="end" font-size="10" fill="#b0b0b6">现在</text>' +
+      '<g id="strip-hover" opacity="0"><line x1="0" y1="' + y0 + '" x2="0" y2="' + y1 + '" stroke="#1d1d1f" stroke-width="1" stroke-dasharray="3 3" opacity=".35"/>' +
+      '<circle r="3" fill="' + ACCENT + '" stroke="#fff" stroke-width="1.5"/></g>' +
+      '<rect id="strip-hit" x="' + x0 + '" y="' + (y0 - 8) + '" width="' + (x1 - x0) + '" height="' + (y1 - y0 + 16) + '" fill="transparent"/>' +
+      '</g></svg>';
+
+    document.getElementById('strip').outerHTML = svg;
+    stripState = { d: d, vals: vals, px: px, py: py, x0: x0, x1: x1 };
+    attachHover();
+  }
+
+  function attachHover() {
+    var svg = document.getElementById('strip');
+    var hover = document.getElementById('strip-hover');
+    var line = hover.querySelector('line');
+    var dot = hover.querySelector('circle');
+    var tip = document.getElementById('tip');
+    var wrap = tip.parentElement;
+
+    svg.addEventListener('mousemove', function (ev) {
+      var rect = svg.getBoundingClientRect();
+      var sx = (ev.clientX - rect.left) / rect.width * STRIP_W;
+      var n = stripState.vals.length;
+      var t = (sx - stripState.x0) / (stripState.x1 - stripState.x0);
+      var idx = Math.max(0, Math.min(n - 1, Math.round(t * (n - 1))));
+      var v = stripState.vals[idx];
+      var x = stripState.px(idx), y = stripState.py(v);
+      line.setAttribute('x1', x); line.setAttribute('x2', x);
+      dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+      hover.setAttribute('opacity', '1');
+      var secsAgo = Math.round((stripState.d.end - stripState.d.start) * (1 - idx / (n - 1)) / 1);
+      var minsAgo = Math.round(secsAgo / 60);
+      tip.textContent = (minsAgo <= 0 ? '现在' : minsAgo + ' 分钟前') + ' · ' + Math.round(v) + ' t/s';
+      var wrapRect = wrap.getBoundingClientRect();
+      tip.style.left = (ev.clientX - wrapRect.left) + 'px';
+      tip.style.top = ((y / STRIP_H) * rect.height) + 'px';
+      tip.classList.add('on');
+    });
+    svg.addEventListener('mouseleave', function () {
+      hover.setAttribute('opacity', '0');
+      document.getElementById('tip').classList.remove('on');
+    });
+  }
+
+  /* ---------- controls ---------- */
+  function select(state) {
+    current = state;
+    document.querySelectorAll('.seg[data-state]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.state === state));
+    });
+    renderBands();
+  }
+  document.querySelectorAll('.seg[data-state]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      stopPlay();
+      select(b.dataset.state);
+    });
+  });
+
+  var playTimer = null;
+  function stopPlay() {
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+    document.getElementById('play').setAttribute('aria-pressed', 'false');
+  }
+  document.getElementById('play').addEventListener('click', function () {
+    var btn = this;
+    if (playTimer) { stopPlay(); return; }
+    var order = ['active', 'stopped', 'idle'];
+    var i = order.indexOf(current);
+    btn.setAttribute('aria-pressed', 'true');
+    playTimer = setInterval(function () {
+      i = (i + 1) % order.length;
+      select(order[i]);
+    }, 2200);
+  });
+
+  renderBands();
+})();
+</script>
+</body>
+</html>
