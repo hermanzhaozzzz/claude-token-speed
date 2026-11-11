@@ -1,11 +1,11 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.1.0-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.2.0-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
 
-**Live token speed with its share of the 60-minute peak, a 3-minute history curve, cache hit rate, context usage, and the current turn timer — above the prompt in Claude Code and Claude Desktop.**
+**Live token speed with its share of the 60-minute peak, a 3-minute history curve, cache hit rate, context usage, and the current turn timer — above the prompt in Claude Code and Claude Desktop, plus a one-click image cleanup for long sessions.**
 
 [中文](README.zh-CN.md) · [Changelog](CHANGELOG.md)
 
@@ -18,10 +18,11 @@ One compact row, right-aligned on the band above the input box:
 | Segment | Meaning |
 |---|---|
 | `⚡ 360.1 t/s · 76% of 472` | Current speed and its share of the 60-minute peak (`472 t/s`). Between turns it reads `0.0 t/s · 0%`. |
-| 3-minute curve | One sample per second, smooth SVG line with an endpoint. The y-axis is pinned to the 60-minute peak; idle seconds sit at the baseline. |
+| 3-minute curve | One sample per second, smooth SVG line with an endpoint. The y-axis is pinned to the 60-minute peak; idle seconds sit at the baseline. It stretches or compresses with the band width while the speed number keeps its size. |
 | `◎ 87%` | Session prompt-cache hit rate. Shows `—` until the provider reports cache reads. |
 | `[██████░░░░] 42%` | Context-window usage and percentage. Shows `—` until the first usage report. |
 | `01:23` | Current turn timer. Freezes at the final duration when the turn ends. |
+| ⌫ 清图 | A button at the right end of the band, after the timer. Drops images from older messages through a local compaction, for sessions that have outgrown the provider's request-body limit. |
 
 The row dims and the endpoint becomes hollow when the model is idle. It appears when the first turn starts and stays visible between turns, so you can compare the last few generations; the speed itself drops to `0.0 t/s` as soon as a turn ends.
 
@@ -57,11 +58,25 @@ Reload an existing session with `/reload-plugins`, or restart the desktop app.
 - **Context** — `context.percent` from `$.session.usage()`, refreshed every 2 seconds and on turn completion.
 - **Timer** — Wall-clock time from `turn.start` to `turn.complete`, updated once per second.
 
+## Clean images from a long session
+
+Screenshots read into a session stay in its context as base64, and every request resends them. After enough of them, the request body can exceed a provider's size limit — private deployments often cap it at a few tens of MB — and both normal turns and `/compact` fail with `400 ... length limit exceeded`.
+
+The **⌫ 清图** button at the right end of the band handles that:
+
+- It answers the engine's `session.compact` hook with a message list that has the images removed. That is a **local compaction: no model call and no request**, so it still works after the current request body is over the limit.
+- It keeps the first message and the newest 8 messages as they are; images in older messages are dropped, and the original image files are untouched.
+- Non-text blocks in those older messages (PDFs, thinking) are dropped too, as part of the same trade.
+- While a turn runs, the button asks you to wait; when there is nothing older to clean, it says so.
+- The cleanup cannot be undone; read an image again if you need it back.
+
+The button runs the built-in `/compact` internally, so the transcript shows a compaction notice.
+
 ## Compatibility
 
 | Plugin | Claude Code / Desktop | Status |
 |---|---|---|
-| 1.1.0 | 2.1.322 desktop (plugin API 2.1.321) | Validated |
+| 1.2.0 | 2.1.322 desktop (plugin API 2.1.321) | Validated |
 
 This plugin uses the Claude Code **function-hooks plugin API**, which is early access and may change between releases. The repository includes a scheduled GitHub Action that runs `claude plugin validate .` against the latest Claude Code release every week, so an API change surfaces as a failed workflow instead of silently breaking the band.
 
@@ -100,7 +115,7 @@ Useful constants at the top of `hooks/register.tsx`:
 | `PEAK_FLOOR` | `100` | Minimum chart ceiling before a peak exists. |
 | `HISTORY_MAX` | `180` | Chart samples; 180 × 1 s = 3 minutes. |
 | chart ceiling | 60-minute peak | Rounded up to the next 50 t/s, with `PEAK_FLOOR` as the minimum. |
-| `CHART_W` / `CHART_H` | `220` / `24` | SVG size in CSS pixels. |
+| `CHART_W` / `CHART_H` | `220` / `24` | Chart viewBox and height. The rendered width follows the band's remaining space; the speed text stays in its own fixed-width SVG. |
 
 After editing, run `/reload-plugins` in a session. The engine reloads the module and runs `session.start` again. Validate before committing:
 
@@ -118,7 +133,7 @@ claude plugin validate .
 
 ## Privacy
 
-Everything is computed locally from the session's own usage events. The plugin makes no network requests, reads no credentials, and writes no files.
+Everything is computed locally from the session's own usage events. The plugin makes no network requests and reads no credentials. The clean button rewrites only the session's own conversation through the engine's compaction hook; it does not read or write your files.
 
 ## Uninstall
 

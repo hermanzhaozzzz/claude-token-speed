@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0 — 2026-11-11
+
+- Add a `⌫ 清图` button at the right end of the band, after the timer. It answers the engine's `session.compact` hook with a pruned message list, so it runs as a local compaction with no model request — it keeps working after a session's request body has exceeded a provider's size limit.
+- Keep the first message and the newest 8 messages; rebuild older ones without their handles, which drops image blocks. Tool pairs stay on one side of the cut, and stored tool records are dropped because they can carry image bytes.
+- Add `tests/clean-images.test.ts` for the pruning rules and the button behavior.
+- Make the band fill the conversation width: the speed number keeps its size while the chart stretches or compresses with the window; the terminal fallback sizes its block curve from `bodyColumns`.
+
 ## 1.1.0 — 2026-11-11
 
 - Zero the speed number when a turn ends; a new turn no longer inherits the previous turn's rolling reading.

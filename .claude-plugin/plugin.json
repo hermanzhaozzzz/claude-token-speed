@@ -1,7 +1,7 @@
 {
   "name": "token-speed",
-  "version": "1.1.0",
-  "description": "Live token speed with its share of the 60-minute peak, 3-minute history, cache hit rate, context usage and turn timer above the prompt.",
+  "version": "1.2.0",
+  "description": "Live token speed with its share of the 60-minute peak, 3-minute history, cache hit rate, context usage, turn timer, and a one-click image cleanup.",
   "author": {
     "name": "Huanan Herman Zhao",
     "url": "https://github.com/hermanzhaozzzz"

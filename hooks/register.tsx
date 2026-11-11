@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer, TurnStepChunk } from 'claude-code'
 
 import type { TokenSpeedSnapshot } from '../types'
+import { KEEP_LAST, pruneMessages } from './prune'
 
 const ACCENT = '#3AA99A'
 const WINDOW_MS = 3000
@@ -13,7 +14,6 @@ const CALLS_MAX = 10
 const CHART_W = 220
 const CHART_H = 24
 const CHART_X = 158
-const SVG_W = CHART_X + CHART_W
 const PAD_X = 2
 const PAD_RIGHT = 6
 const PAD_Y = 2
@@ -60,6 +60,9 @@ let samples: Sample[] = []
 
 let timer: Timer | null = null
 let tickCount = 0
+let cleanRequested = false
+let cleanApplied = false
+let cleanMessage = ''
 
 function estimateTokens(text: string): number {
   let ascii = 0
@@ -151,9 +154,9 @@ function chartCeiling(): number {
   return Math.ceil(peak60m / 50) * 50
 }
 
-function blockSpark(values: number[]): string {
+function blockSpark(values: number[], columns: number): string {
   const all = padded(values)
-  const cols = 36
+  const cols = Math.max(1, Math.floor(columns))
   const size = all.length / cols
   const ceiling = chartCeiling()
   let out = ''
@@ -197,7 +200,16 @@ function escapeXml(value: string): string {
   }[ch] ?? ch))
 }
 
-function renderSvg(values: number[], active: boolean, speedText: string, peakText: string): string {
+function renderSpeedSvg(speedText: string, peakText: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${CHART_X}" height="${CHART_H}" viewBox="0 0 ${CHART_X} ${CHART_H}">
+<g>
+<path d="M5 2 L1 12 L4.5 12 L4 20 L10 9 L6.5 9 Z" fill="${ACCENT}"/>
+<text x="16" y="18" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="13" font-weight="650" fill="${ACCENT}">${escapeXml(speedText)}<tspan fill="#8a8a8e" font-weight="400"> t/s</tspan>${peakText ? `<tspan fill="#8a8a8e" font-weight="400" font-size="11"> · ${escapeXml(peakText)}</tspan>` : ''}</text>
+</g>
+</svg>`
+}
+
+function renderChartSvg(values: number[], active: boolean): string {
   const all = padded(values)
   const ceiling = chartCeiling()
   const points = all.map((v, i) => ({
@@ -214,19 +226,17 @@ function renderSvg(values: number[], active: boolean, speedText: string, peakTex
     ? `<circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="1.3" fill="${ACCENT}"/>`
     : ''
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${SVG_W}" height="${CHART_H}" viewBox="0 0 ${SVG_W} ${CHART_H}">
+  // width 100% + preserveAspectRatio none lets the chart stretch with the band;
+  // the speed text stays in its own fixed SVG so it is never scaled.
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${CHART_H}" viewBox="0 0 ${CHART_W} ${CHART_H}" preserveAspectRatio="none">
 <defs><linearGradient id="ts-area" x1="0" y1="0" x2="0" y2="1">
 <stop offset="0%" stop-color="${ACCENT}" stop-opacity="${fillOpacity}"/>
 <stop offset="100%" stop-color="${ACCENT}" stop-opacity="0"/>
 </linearGradient></defs>
 <g opacity="${opacity}">
-<path d="M5 2 L1 12 L4.5 12 L4 20 L10 9 L6.5 9 Z" fill="${ACCENT}"/>
-<text x="16" y="18" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="13" font-weight="650" fill="${ACCENT}">${escapeXml(speedText)}<tspan fill="#8a8a8e" font-weight="400"> t/s</tspan>${peakText ? `<tspan fill="#8a8a8e" font-weight="400" font-size="11"> · ${escapeXml(peakText)}</tspan>` : ''}</text>
-</g>
-<g transform="translate(${CHART_X},0)">
 <path d="${area}" fill="url(#ts-area)"/>
-<path d="${line}" fill="none" stroke="${ACCENT}" stroke-opacity="${opacity}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="3.2" fill="none" stroke="${ACCENT}" stroke-opacity="${opacity}" stroke-width="1.4"/>
+<path d="${line}" fill="none" stroke="${ACCENT}" stroke-opacity="${opacity}" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="3.2" fill="none" stroke="${ACCENT}" stroke-opacity="${opacity}" stroke-width="1.4" vector-effect="non-scaling-stroke"/>
 ${dot}
 </g>
 </svg>`
@@ -316,6 +326,9 @@ function resetSession(): void {
   chunksSinceSample = 0
   samples = []
   tickCount = 0
+  cleanRequested = false
+  cleanApplied = false
+  cleanMessage = ''
 }
 
 async function observe($: EngineInterface, chunk: TurnStepChunk): Promise<void> {
@@ -374,6 +387,34 @@ async function observe($: EngineInterface, chunk: TurnStepChunk): Promise<void> 
   }
 }
 
+async function cleanImages($: EngineInterface): Promise<void> {
+  const state = await read($, snap)
+  if (state.isActive) {
+    await $.ui.toast('等本轮结束后再清理')
+    return
+  }
+
+  cleanRequested = true
+  cleanApplied = false
+  cleanMessage = ''
+  try {
+    await $.command.run({ command: 'compact' })
+    await $.ui.toast(cleanApplied ? cleanMessage : '清理没有生效，请确认 Claude Code 版本')
+    try {
+      const usage = await $.session.usage()
+      contextPercent = typeof usage.context.percent === 'number' ? usage.context.percent : null
+      await writeSnapshot($)
+    } catch {
+      // keep the last reading
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await $.ui.toast('清理失败：' + message)
+  } finally {
+    cleanRequested = false
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     $.ui.status(undefined)
@@ -388,6 +429,32 @@ export const register: Register = on => {
     resetSession()
     $.ui.status(undefined)
     return next(e)
+  })
+
+  on('session.compact', async ($, e, next) => {
+    if (!cleanRequested) return next(e)
+    if (e.agentId !== undefined || e.trigger === 'precompute') return next(e)
+    cleanRequested = false
+    cleanApplied = true
+    try {
+      const pruned = pruneMessages(e.messages, KEEP_LAST)
+      if (pruned.length === e.messages.length && pruned.every((message, i) => message === e.messages[i])) {
+        cleanMessage = '没有更早的消息可清理'
+        return { skip: cleanMessage }
+      }
+      cleanMessage = `已清理历史截图，保留最近 ${KEEP_LAST} 条消息`
+      return { messages: pruned }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      cleanMessage = '清理失败：' + message
+      return { skip: cleanMessage }
+    }
+  }).catch(async ($, e, next) => {
+    cleanRequested = false
+    if (next.called) return next(e)
+    cleanApplied = true
+    cleanMessage = '清理失败：hook 超时或未运行'
+    return { skip: cleanMessage }
   })
 
   on('prompt.submit', async ($, e, next) => {
@@ -474,30 +541,47 @@ export const register: Register = on => {
     const timerText = formatTime(s.elapsedSec)
 
     if (e.surface === 'terminal') {
-      const { Box, Text } = $.ui.resolve(e)
+      const { Box, Text, Button } = $.ui.resolve(e)
+      const columns = typeof e.props.bodyColumns === 'number' ? e.props.bodyColumns : 120
+      const sparkColumns = Math.max(12, Math.min(64, columns - 60))
       return (
         <Box width="100%" justifyContent="flex-end" alignItems="center" gap="sm">
           <Text color="text" dimColor={!s.isActive}>⚡ {speedText} t/s{s.percentOfPeak === null ? '' : ` · ${s.percentOfPeak}%`}</Text>
-          <Text dimColor>{blockSpark(s.history)}</Text>
+          <Text dimColor>{blockSpark(s.history, sparkColumns)}</Text>
           <Text dimColor>◎ {cacheText}</Text>
           <Text dimColor>[{ctxBar}] {ctxText}</Text>
           <Text dimColor>{timerText}</Text>
+          <Text dimColor>·</Text>
+          <Box key="clean-hover">
+            <Button key="clean-images" label="⌫ 清图" plain dimColor hover={{ color: ACCENT }} onPress={() => { void cleanImages($) }} />
+          </Box>
         </Box>
       )
     }
 
-    const { Box, Text, Svg } = $.ui.resolve(e)
+    const { Box, Text, Svg, Button } = $.ui.resolve(e)
     return (
-      <Box width="100%" justifyContent="flex-end" alignItems="center" gap="sm">
+      <Box width="100%" alignItems="center" gap="sm">
         <Svg
-          source={renderSvg(s.history, s.isActive, speedText, peakText)}
-          alt={`Token speed over the last 3 minutes; current ${speedText} tokens per second${s.percentOfPeak === null ? '' : `, ${s.percentOfPeak}% of the 60-minute peak`}`}
-          width={SVG_W}
+          source={renderSpeedSvg(speedText, peakText)}
+          alt={`Current ${speedText} tokens per second${s.percentOfPeak === null ? '' : `, ${s.percentOfPeak}% of the 60-minute peak`}`}
+          width={CHART_X}
           height={CHART_H}
         />
+        <Box flexGrow={1} flexShrink={1}>
+          <Svg
+            source={renderChartSvg(s.history, s.isActive)}
+            alt="Token speed over the last 3 minutes"
+            height={CHART_H}
+          />
+        </Box>
         <Text dimColor>◎ {cacheText}</Text>
         <Text dimColor>[{ctxBar}] {ctxText}</Text>
         <Text dimColor>{timerText}</Text>
+        <Text dimColor>·</Text>
+        <Box key="clean-hover">
+          <Button key="clean-images" label="⌫ 清图" plain dimColor hover={{ color: ACCENT }} onPress={() => { void cleanImages($) }} />
+        </Box>
       </Box>
     )
   })
