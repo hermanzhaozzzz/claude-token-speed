@@ -1,6 +1,6 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.2.6-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.2.7-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
@@ -72,7 +72,7 @@ The **⌫ 清图** button at the right end of the band handles that:
 
 The button triggers the engine's compact event, but the plugin intercepts it: **no model call and no summarization happen**. The conversation is not condensed — only older tool-result screenshots are removed, and the first message, the newest 8 messages, assistant thinking, and user prompts stay whole. The transcript still shows the engine's “Compacted” notice because that is the event the button uses; it does not mean the context was summarized. Typing `/compact` yourself is different: that request is not intercepted and runs the normal model summarization, which can still fail on an oversized session.
 
-In Claude Desktop the built-in security guard skips a user-installed mod's `session.compact` hook, so the button works in the terminal. Clicking the button in the desktop copies the exact one-command setup and puts it on its own line in the transcript, so it is easy to select.
+In Claude Desktop the built-in security guard skips a user-installed mod's `session.compact` hook, so the button works in the terminal. In the desktop, clicking it opens a setup pane: **安装并重启** quits Claude first, asks for the administrator password, installs the machine-level managed copy from the plugin you already have, removes the user-scope plugin, and reopens Claude. The install runs as a detached `launchctl` job, so quitting the app cannot interrupt it; after that the button in the desktop cleans directly. If the install fails, the next session start says so and points at `/tmp/token-speed-setup.log`.
 
 ### Claude Desktop: one command
 
@@ -80,13 +80,13 @@ In Claude Desktop the built-in security guard skips a user-installed mod's `sess
 curl -fsSL https://raw.githubusercontent.com/hermanzhaozzzz/claude-token-speed/main/scripts/install-managed.sh | sudo bash
 ```
 
-It installs the machine-level managed copy, removes the user-scope plugin and its marketplace (so the app cannot load a same-name `--plugin-dir` copy), and restarts Claude. It asks for the admin password once. Re-run it to update the managed copy, and do not also install the user-scope plugin on the same machine.
+It installs the machine-level managed copy, removes the user-scope plugin and its marketplace (so the app cannot load a same-name `--plugin-dir` copy), and restarts Claude. It asks for the admin password once. Re-run it to update the managed copy, and do not also install the user-scope plugin on the same machine. The script also takes `--source DIR` (install from an existing checkout instead of cloning), `--user NAME` (the desktop user, for when `SUDO_USER` is unset) and `--no-restart`.
 
 ## Compatibility
 
 | Plugin | Claude Code / Desktop | Status |
 |---|---|---|
-| 1.2.6 | 2.1.322 desktop (plugin API 2.1.321) | Validated |
+| 1.2.7 | 2.1.322 desktop (plugin API 2.1.321) | Validated |
 
 This plugin uses the Claude Code **function-hooks plugin API**, which is early access and may change between releases. The repository includes a scheduled GitHub Action that runs `claude plugin validate .` against the latest Claude Code release every week, so an API change surfaces as a failed workflow instead of silently breaking the band.
 

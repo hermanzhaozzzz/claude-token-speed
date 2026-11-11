@@ -268,19 +268,11 @@ test('the clean button prunes the conversation through session.compact', async (
   await ui.unmount()
 })
 
-test('the clean button offers the one-command desktop setup', async ($, on) => {
-  let toast = ''
-  const toasted = new Promise<void>(resolve => {
-    on('ui.toast', ($hook, e) => {
-      toast = e.text
-      resolve()
-      return { value: undefined }
-    })
-  })
-  let logged = ''
-  on('ui.log', ($hook, e) => {
-    logged = e.text
-    return { value: undefined }
+test('the clean button opens the desktop setup pane', async ($, on) => {
+  const opened: string[] = []
+  on('ui.open', ($hook, e) => {
+    opened.push(e.id)
+    return { value: { isPlaced: true } }
   })
   let commands = 0
   on('command.run', () => {
@@ -297,9 +289,49 @@ test('the clean button offers the one-command desktop setup', async ($, on) => {
     props: BAND,
   })
   await ui.press({ key: 'clean-images' })
-  await toasted
-  expect(logged).toContain('install-managed.sh')
-  expect(toast).toContain('guard')
+  expect(opened).toContain('token-speed-setup')
   expect(commands).toBe(0)
   await ui.unmount()
+})
+
+test('the setup pane starts the detached installer', async ($, on) => {
+  const runs: string[][] = []
+  let started!: () => void
+  const submitted = new Promise<void>(resolve => {
+    started = resolve
+  })
+  on('process.run', ($hook, e) => {
+    runs.push([...e.argv])
+    if (e.argv[1] === 'submit') started()
+    return { value: { exitCode: 0, stdout: '', stderr: '' } }
+  })
+  on('env.get', () => ({ value: 'tester' }))
+  on('ui.close', () => ({ value: undefined }))
+  on('ui.toast', () => ({ value: undefined }))
+  baseStubs(on)
+  await startSession($, false)
+
+  const pane = await $.ui.mount({
+    plugin: 'token-speed',
+    surface: 'desktop',
+    component: 'Pane',
+    requestId: 'token-speed-setup',
+    props: {
+      title: 'token-speed 桌面设置',
+      isFocused: true,
+      bodyColumns: 96,
+      placement: 'inline',
+      scroll: { offset: 0, bodyRows: 12 },
+      view: {},
+    },
+  })
+  await pane.press({ key: '安装并重启' })
+  await submitted
+
+  const submit = (runs.find(argv => argv[1] === 'submit') ?? []).join(' ')
+  expect(submit).toContain('launchctl submit')
+  expect(submit).toContain('/bin/bash')
+  expect(submit).toContain('scripts/setup-from-app.sh')
+  expect(submit).toContain('tester')
+  await pane.unmount()
 })

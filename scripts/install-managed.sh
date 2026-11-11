@@ -11,6 +11,24 @@ set -euo pipefail
 #   curl -fsSL https://raw.githubusercontent.com/hermanzhaozzzz/claude-token-speed/main/scripts/install-managed.sh | sudo bash
 #
 # Re-run the same command to update the managed copy.
+#
+# Options (used by the 清图 button in the desktop app):
+#   --source DIR   install from this directory instead of cloning (skips the network)
+#   --user NAME    the desktop user; defaults to $SUDO_USER
+#   --no-restart   do not quit and reopen Claude afterwards
+
+SOURCE=""
+USER_NAME=""
+RESTART=1
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --source) SOURCE="${2:-}"; shift 2 ;;
+    --user) USER_NAME="${2:-}"; shift 2 ;;
+    --no-restart) RESTART=0; shift ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   echo "Run this with sudo, from your own account." >&2
@@ -18,7 +36,7 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   exit 1
 fi
 
-USER_NAME="${SUDO_USER:-}"
+[ -n "$USER_NAME" ] || USER_NAME="${SUDO_USER:-}"
 if [ -z "$USER_NAME" ] || [ "$USER_NAME" = "root" ]; then
   echo "Run this with sudo from your own account, not as root." >&2
   exit 1
@@ -45,15 +63,23 @@ if [ -z "$CLAUDE_BIN" ] || [ ! -x "$CLAUDE_BIN" ]; then
   exit 1
 fi
 
-WORK="/tmp/token-speed-managed.$$"
-trap 'rm -rf "$WORK"' EXIT
-
-echo "Fetching the plugin…"
-run_as_user "rm -rf '$WORK' && mkdir -p '$WORK' && git clone --depth 1 git@github.com:hermanzhaozzzz/claude-token-speed.git '$WORK/src'"
-SRC="$WORK/src"
-if [ ! -f "$SRC/.claude-plugin/plugin.json" ]; then
-  echo "The plugin manifest is missing from the clone." >&2
-  exit 1
+if [ -n "$SOURCE" ]; then
+  SRC="$SOURCE"
+  echo "Using the plugin at $SRC…"
+  if [ ! -f "$SRC/.claude-plugin/plugin.json" ]; then
+    echo "The plugin manifest is missing from $SRC." >&2
+    exit 1
+  fi
+else
+  WORK="/tmp/token-speed-managed.$$"
+  trap 'rm -rf "$WORK"' EXIT
+  echo "Fetching the plugin…"
+  run_as_user "rm -rf '$WORK' && mkdir -p '$WORK' && git clone --depth 1 https://github.com/hermanzhaozzzz/claude-token-speed.git '$WORK/src'"
+  SRC="$WORK/src"
+  if [ ! -f "$SRC/.claude-plugin/plugin.json" ]; then
+    echo "The plugin manifest is missing from the clone." >&2
+    exit 1
+  fi
 fi
 
 BASE="/Library/Application Support/ClaudeCode"
@@ -71,6 +97,7 @@ echo "Installing the managed copy…"
 mkdir -p "$MARKET/.claude-plugin" "$PLUGIN"
 rsync -a --delete \
   --exclude '.git' \
+  --exclude '.in_use' \
   --exclude 'node_modules' \
   --exclude 'tests' \
   --exclude 'scripts' \
@@ -111,12 +138,16 @@ echo "Removing the user-scope plugin and marketplace…"
 run_as_user "'$CLAUDE_BIN' plugin uninstall token-speed@claude-token-speed" || true
 run_as_user "'$CLAUDE_BIN' plugin marketplace remove claude-token-speed" || true
 
-echo "Restarting Claude…"
-run_as_user "osascript -e 'tell application \"Claude\" to quit'" || true
-sleep 2
-run_as_user "open -a 'Claude'" || true
+if [ "$RESTART" -eq 1 ]; then
+  echo "Restarting Claude…"
+  run_as_user "osascript -e 'tell application \"Claude\" to quit'" || true
+  sleep 2
+  run_as_user "open -a 'Claude'" || true
+else
+  echo "Skipping the Claude restart (--no-restart)."
+fi
 
 echo
 echo "Done. token-speed now runs as a managed plugin."
-echo "The user-scope plugin and marketplace were removed, and Claude was restarted."
+echo "The user-scope plugin and marketplace were removed."
 echo "Click 清图 in Claude Desktop. Re-run this command to update the managed copy."

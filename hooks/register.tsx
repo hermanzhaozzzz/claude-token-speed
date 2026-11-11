@@ -18,7 +18,9 @@ const PAD_X = 2
 const PAD_RIGHT = 6
 const PAD_Y = 2
 const MANAGED_ROOT = '/Library/Application Support/ClaudeCode/token-speed-market/plugin'
-const DESKTOP_SETUP_COMMAND = 'curl -fsSL https://raw.githubusercontent.com/hermanzhaozzzz/claude-token-speed/main/scripts/install-managed.sh | sudo bash'
+const SETUP_PANE = 'token-speed-setup'
+const SETUP_JOB = 'com.hermanzhaozzzz.token-speed-setup'
+const SETUP_STATUS = '/tmp/token-speed-setup.status'
 
 const BLOCKS = '▁▂▃▄▅▆▇█'
 
@@ -391,17 +393,14 @@ async function observe($: EngineInterface, chunk: TurnStepChunk): Promise<void> 
 
 async function cleanImages($: EngineInterface, surface: string, managed: boolean): Promise<void> {
   if (surface !== 'terminal' && !managed) {
-    let copied = false
-    try {
-      const result = await $.ui.copy(DESKTOP_SETUP_COMMAND)
-      copied = result?.isCopied ?? true
-    } catch {
-      // clipboard unavailable
-    }
-    await $.ui.log(DESKTOP_SETUP_COMMAND)
-    await $.ui.toast(
-      `桌面端的内置 guard 会跳过本地清图。${copied ? '命令已复制到剪贴板' : '请复制上面那行命令'}，粘贴到终端运行；它会安装 managed 副本、卸载 user 插件并重启 Claude。`,
-    )
+    await $.ui.open({
+      id: SETUP_PANE,
+      title: 'token-speed 桌面设置',
+      focus: true,
+      closeOnEscape: true,
+      rows: 12,
+      columns: 96,
+    })
     return
   }
 
@@ -432,12 +431,82 @@ async function cleanImages($: EngineInterface, surface: string, managed: boolean
   }
 }
 
+async function startDesktopSetup($: EngineInterface): Promise<void> {
+  await $.ui.close({ id: SETUP_PANE })
+
+  const user = await $.env.get('USER')
+  if (!user) {
+    await $.ui.toast('找不到当前用户名，请在终端运行一键安装命令')
+    return
+  }
+
+  const root = $.plugin.root.replace(/\/+$/, '')
+  try {
+    await $.process.run(['launchctl', 'remove', SETUP_JOB]).catch(() => undefined)
+    const result = await $.process.run([
+      'launchctl',
+      'submit',
+      '-l',
+      SETUP_JOB,
+      '-o',
+      '/tmp/token-speed-setup.log',
+      '-e',
+      '/tmp/token-speed-setup.log',
+      '--',
+      '/bin/bash',
+      `${root}/scripts/setup-from-app.sh`,
+      root,
+      user,
+    ])
+    if (result.exitCode !== 0) {
+      await $.ui.toast(`启动安装失败：${(result.stderr || result.stdout).trim().slice(0, 180)}`)
+      return
+    }
+    await $.ui.toast('即将退出 Claude，输入管理员密码后会自动装好并重开')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await $.ui.toast('启动安装失败：' + message)
+  }
+}
+
+async function reportSetupResult($: EngineInterface): Promise<void> {
+  try {
+    const text = await $.fs.read(SETUP_STATUS)
+    const [state, stamp, ...rest] = text.trim().split(':')
+    if (state !== 'failed') return
+    const at = Number(stamp)
+    if (!(at > 0)) return
+    const now = await $.clock.now()
+    if (now - at > 600_000) return
+    await $.ui.toast(rest.join(':') || '桌面安装失败，详见 /tmp/token-speed-setup.log')
+  } catch {
+    // no status file
+  }
+}
+
 export const register: Register = on => {
+  on('ui.render', { component: 'Pane' }, async ($, e, next) => {
+    if (e.requestId !== SETUP_PANE) return next(e)
+    const { Box, Text, Button } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="column" gap="sm" padding={1}>
+        <Text bold>桌面端清图需要安装一次 managed 副本</Text>
+        <Text dimColor>点「安装并重启」后：Claude 会先退出，系统要求输入管理员密码，装好后自动重开。</Text>
+        <Text dimColor>安装会从当前插件目录写入机器级副本，并移除 user 作用域插件，避免同名冲突。</Text>
+        <Box gap="sm">
+          <Button label="安装并重启" onPress={() => { void startDesktopSetup($) }} />
+          <Button label="取消" plain dimColor onPress={() => { void $.ui.close({ id: SETUP_PANE }) }} />
+        </Box>
+      </Box>
+    )
+  })
+
   on('session.start', async ($, e, next) => {
     $.ui.status(undefined)
     resetSession()
     ensureTimer($)
     await writeSnapshot($)
+    await reportSetupResult($)
     return next(e)
   })
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.7 — 2026-11-11
+
+- The desktop button now opens a setup pane instead of a toast. **安装并重启** quits Claude first, then asks for the admin password, installs the managed copy from the currently installed plugin, removes the user-scope plugin, and reopens Claude. The install runs detached through `launchctl`, so quitting the app cannot kill it.
+- The installer gains `--source DIR`, `--user NAME` and `--no-restart`; the one-command setup still works as before and now clones over HTTPS.
+- A failed in-app install is reported the next time the session starts, with the log path.
+
 ## 1.2.6 — 2026-11-11
 
 - The desktop warning now puts the installer command on its own transcript line (and copies it), so it is easy to select and paste.
