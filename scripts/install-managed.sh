@@ -134,9 +134,21 @@ JSON
 chmod 755 "$BASE" "$MARKET" "$PLUGIN"
 chmod 644 "$SETTINGS" "$MARKET/.claude-plugin/marketplace.json"
 
-echo "Removing the user-scope plugin and marketplace…"
-run_as_user "'$CLAUDE_BIN' plugin uninstall token-speed@claude-token-speed" || true
-run_as_user "'$CLAUDE_BIN' plugin marketplace remove claude-token-speed" || true
+echo "Cleaning up any user-scope copy…"
+INSTALLED_JSON="$USER_HOME/.claude/plugins/installed_plugins.json"
+KNOWN_JSON="$USER_HOME/.claude/plugins/known_marketplaces.json"
+REMOVED=0
+
+# Only call the CLI when there is something to remove: a failed uninstall is
+# otherwise reported as an error even though nothing was installed.
+if [ -f "$INSTALLED_JSON" ] && grep -q 'token-speed@claude-token-speed' "$INSTALLED_JSON"; then
+  run_as_user "'$CLAUDE_BIN' plugin uninstall token-speed@claude-token-speed" || true
+  REMOVED=1
+fi
+if [ -f "$KNOWN_JSON" ] && grep -q '"claude-token-speed"' "$KNOWN_JSON"; then
+  run_as_user "'$CLAUDE_BIN' plugin marketplace remove claude-token-speed" || true
+  REMOVED=1
+fi
 
 if [ "$RESTART" -eq 1 ]; then
   echo "Restarting Claude…"
@@ -149,5 +161,9 @@ fi
 
 echo
 echo "Done. token-speed now runs as a managed plugin."
-echo "The user-scope plugin and marketplace were removed."
+if [ "$REMOVED" -eq 1 ]; then
+  echo "The user-scope plugin and marketplace were removed."
+else
+  echo "No user-scope plugin or marketplace was installed."
+fi
 echo "Click 清图 in Claude Desktop. Re-run this command to update the managed copy."

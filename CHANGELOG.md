@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.9 — 2026-11-11
+
+- The one-command installer only uninstalls the user-scope plugin and marketplace when they are actually installed, and says so; a clean machine no longer prints two red `✘ Failed to uninstall` lines that look like errors.
+
 ## 1.2.8 — 2026-11-11
 
 - Fix the desktop setup restarting Claude in a loop: `launchctl submit` re-runs its job on a timer, so the installer exited and reopened the app every ten seconds. It now starts once through perl `fork` + `setsid`, which survives the app quitting without repeating.
