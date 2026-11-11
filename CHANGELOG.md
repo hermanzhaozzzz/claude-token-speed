@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.5 — 2026-11-11
+
+- The desktop warning now shows and copies one command; that command installs the managed copy, removes the user-scope plugin and marketplace, and restarts Claude.
+
 ## 1.2.4 — 2026-11-11
 
 - The desktop warning now tells users to uninstall the user-scope plugin after a machine-level managed install; the README documents the cleanup order and the same-name lock.

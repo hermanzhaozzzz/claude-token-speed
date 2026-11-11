@@ -268,7 +268,7 @@ test('the clean button prunes the conversation through session.compact', async (
   await ui.unmount()
 })
 
-test('the clean button explains the desktop guard instead of running compact', async ($, on) => {
+test('the clean button offers the one-command desktop setup', async ($, on) => {
   let toast = ''
   const toasted = new Promise<void>(resolve => {
     on('ui.toast', ($hook, e) => {
@@ -293,7 +293,7 @@ test('the clean button explains the desktop guard instead of running compact', a
   })
   await ui.press({ key: 'clean-images' })
   await toasted
-  expect(toast).toContain('guard')
+  expect(toast).toContain('install-managed.sh')
   expect(commands).toBe(0)
   await ui.unmount()
 })
