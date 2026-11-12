@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>token-speed · 稳定的平均速度</title>
+<style>
+  :root {
+    --teal: #3AA99A;
+    --ink: #1d1d1f;
+    --muted: #6e6e73;
+    --faint: #8a8a8e;
+    --surface: #f3f3f5;
+    --line: #e3e3e8;
+    --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: #fafafa; color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1000px; margin: 0 auto; padding: 44px 36px 80px; }
+  h1 { margin: 0 0 10px; font-size: 27px; line-height: 1.2; letter-spacing: -0.02em; font-weight: 700; }
+  .lede { margin: 0 0 26px; color: var(--muted); font-size: 14px; line-height: 1.65; max-width: 760px; }
+  .lede b { color: var(--ink); font-weight: 600; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px 13px; margin: 0 0 14px; }
+  .card-head { display: flex; align-items: baseline; gap: 10px; margin: 0 2px 9px; }
+  .tag { font-size: 12px; font-weight: 650; letter-spacing: .02em; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
+  .card.idle .tag .dot { background: #b4b4bb; }
+  .card-head .sub { font-size: 12px; color: var(--faint); }
+  .note { margin: 9px 2px 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+  .note b { color: var(--ink); font-weight: 600; }
+
+  .band {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid #e7e7ec; border-radius: 12px;
+    padding: 9px 14px; min-height: 44px; overflow: hidden;
+  }
+  .band .speed { flex: 0 0 158px; display: block; }
+  .band .chart { flex: 1 1 auto; min-width: 0; }
+  .band .chart svg { display: block; width: 100%; height: 24px; }
+  .chip { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .chip.faint { color: var(--faint); }
+  .chip.avg { color: var(--faint); }
+  .chip .mark { color: var(--teal); }
+  .chip.time { color: var(--faint); }
+  .action { color: var(--muted); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .band.idle .chip, .band.idle .action { opacity: .72; }
+
+  /* text surfaces: terminal + VS Code webview */
+  .band.text { justify-content: flex-end; font-size: 13px; }
+  .band.text.mono { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 12px; }
+  .spark { color: var(--faint); white-space: pre; }
+  .band.dark { background: #1f1f22; border-color: #2c2c30; }
+  .band.dark .chip { color: #b9b9bf; }
+  .band.dark .chip.faint, .band.dark .chip.time, .band.dark .action { color: #86868b; }
+  .band.dark .chip .mark { color: var(--teal); }
+  .band.dark .spark { color: #9a9aa0; }
+
+
+  .variant { display: grid; grid-template-columns: 130px 1fr 260px; align-items: center; gap: 12px; padding: 7px 0; }
+  .variant + .variant { border-top: 1px dashed #ececf1; }
+  .vlabel { font-size: 12px; font-weight: 600; color: var(--ink); }
+  .vchart svg { display: block; width: 100%; height: 24px; }
+  .vnote { font-size: 11.5px; line-height: 1.45; color: var(--faint); }
+  .facts { margin: 26px 2px 0; display: grid; grid-template-columns: 150px 1fr; gap: 10px 18px; font-size: 13px; line-height: 1.6; }
+  .facts dt { color: var(--ink); font-weight: 600; }
+  .facts dd { margin: 0; color: var(--muted); }
+  .foot { margin-top: 26px; font-size: 11.5px; color: var(--faint); line-height: 1.6; }
+  code { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: .92em; background: #f1f1f4; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>稳定的平均速度 · 预览</h1>
+  <p class="lede">
+    新增一个 <b>最近 10 分钟生成时长</b> 的平均速度，作为“上游最近怎么样”的稳定读数。
+    分母只累计真正出字的解码时间（首个内容 chunk → 结束），排队等首字节和所有空挡都不进入，
+    所以轮次之间、长时间空闲时它都不会掉，只在模型确实变慢时下降。
+    曲线改为 <b>30 秒滑动平均</b>（只平均生成中的秒，空挡不参与），和平均值同一口径；速度读数里原本的 <code>xx% of xxx</code> 峰值占比改为这个平均值，桌面端同时用虚线在曲线上标出它，文本版显示为 <code>⌀ 205</code>。
+  </p>
+
+  <section class="card">
+    <div class="card-head">
+      <span class="tag"><span class="dot"></span>桌面 · 生成中</span>
+      <span class="sub">读数 = 当前 · 平均；曲线 = 30 秒滑动平均；虚线 = 平均</span>
+    </div>
+    <div class="band" id="band-active"></div>
+    <p class="note">当前 <b>248</b> 高于平均 <b>205</b>：曲线在虚线上方。峰值只在后台用于曲线纵轴标定，不再出现在读数里。</p>
+  </section>
+
+  <section class="card idle">
+    <div class="card-head">
+      <span class="tag"><span class="dot"></span>桌面 · 空闲</span>
+      <span class="sub">当前速度归零、曲线落底，平均保持不动</span>
+    </div>
+    <div class="band idle" id="band-idle"></div>
+    <p class="note">这是关键：空挡只影响当前速度与曲线，不影响读数里的 <b>⌀ 205</b>。等待 5 分钟后回来，仍是上游的真实水平。</p>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <span class="tag"><span class="dot"></span>文本版 · 终端</span>
+      <span class="sub">块字符曲线，平均紧跟在速度后面</span>
+    </div>
+    <div class="band text mono dark" id="band-terminal"></div>
+    <p class="note">平均直接写在速度读数里（<code>248.6 t/s · ⌀ 205</code>），空间比原来只显示百分比时还省一点。</p>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <span class="tag"><span class="dot"></span>文本版 · VS Code / 窄窗口</span>
+      <span class="sub">空间不够时右端截断</span>
+    </div>
+    <div class="band text" id="band-vscode"></div>
+    <div style="height:8px"></div>
+    <div class="band text" id="band-narrow" style="max-width:440px"></div>
+    <p class="note">窄窗口下仍是单行，超出部分省略；平均在速度读数里，不会被截掉。</p>
+  </section>
+
+
+  <section class="card">
+    <div class="card-head">
+      <span class="tag"><span class="dot"></span>曲线口径（同一段历史，三种画法）</span>
+      <span class="sub">虚线都是 10 分钟平均 205</span>
+    </div>
+    <div class="variant"><span class="vlabel">A · 现在（旧）</span><div class="vchart" id="v-a"></div><span class="vnote">每秒瞬时值，空闲秒画 0：看着像“速度掉到 0”</span></div>
+    <div class="variant"><span class="vlabel">B · 只画生成段</span><div class="vchart" id="v-b"></div><span class="vnote">空闲留空，不画 0：曲线只表示生成时的速度，和平均同口径</span></div>
+    <div class="variant"><span class="vlabel">C · 30 秒滑动平均 ✓</span><div class="vchart" id="v-c"></div><span class="vnote">平滑版：读的是“最近的稳定速度”，爆发细节会被抹平</span></div>
+    <p class="note">三种画法的虚线位置完全相同；差别只在曲线本身想说什么。</p>
+  </section>
+
+  <dl class="facts">
+    <dt>平均的定义</dt>
+    <dd>最近 <b>10 分钟生成时长</b> 内的 <code>Σ output_tokens ÷ Σ decode_ms</code>。窗口按生成时间累计，不按墙钟。</dd>
+    <dt>decode_ms</dt>
+    <dd>首个内容 chunk 到 stop 的时间；排队等首字节（TTFT）不算。上游拥挤导致的长等待不会拖低平均。</dd>
+    <dt>空挡</dt>
+    <dd>空闲秒没有 decode 时间，也不产生 token，既不进分子也不进分母。轮次结束、长时间空闲都不清零。</dd>
+    <dt>小样本</dt>
+    <dd><code>decode &lt; 500 ms</code> 或 <code>tokens &lt; 20</code> 的 step 忽略，避免一两个字的调用造成噪声。</dd>
+    <dt>重置</dt>
+    <dd>只在会话开始时清空；<code>prompt.submit</code>、<code>turn.complete</code> 都不动它。</dd>
+  </dl>
+
+  <p class="foot">模拟数据：峰值 472 t/s，平均 205 t/s，当前 248 t/s，上下文 2%，缓存命中 87%，本轮 00:13。曲线为最近 180 秒，每秒一个采样，空闲秒停在基线。</p>
+</div>
+
+<script>
+  const TEAL = '#3AA99A';
+  const HISTORY_MAX = 180;
+  const CHART_W = 220, CHART_H = 24, PAD_X = 2, PAD_RIGHT = 6, PAD_Y = 2;
+  const CEILING = 500;
+  const AVG = 205;
+  const BLOCKS = '▁▂▃▄▅▆▇█';
+
+  // 180 秒历史：几段生成、几段空挡，最后一段用作"生成中"
+  function buildHistory(active) {
+    const values = [];
+    const plan = [
+      { n: 26, lo: 60, hi: 120 },
+      { n: 14, lo: 0, hi: 0 },
+      { n: 34, lo: 180, hi: 320 },
+      { n: 18, lo: 0, hi: 0 },
+      { n: 30, lo: 200, hi: 360 },
+      { n: 8, lo: 0, hi: 0 },
+    ];
+    for (const part of plan) {
+      for (let i = 0; i < part.n; i += 1) {
+        const v = part.hi === 0 ? 0 : part.lo + Math.random() * (part.hi - part.lo);
+        values.push(Math.round(v));
+      }
+    }
+    const tail = HISTORY_MAX - values.length;
+    for (let i = 0; i < tail; i += 1) {
+      const v = active ? 210 + Math.random() * 90 : 0;
+      values.push(Math.round(v));
+    }
+    return values.slice(-HISTORY_MAX);
+  }
+
+  function padded(values) {
+    const missing = Math.max(0, HISTORY_MAX - values.length);
+    return missing > 0 ? [...new Array(missing).fill(0), ...values] : values.slice(-HISTORY_MAX);
+  }
+
+  function points(all) {
+    return all.map((v, i) => ({
+      x: PAD_X + (i / (all.length - 1)) * (CHART_W - PAD_X - PAD_RIGHT),
+      y: PAD_Y + (1 - Math.max(0, Math.min(CEILING, v)) / CEILING) * (CHART_H - PAD_Y * 2),
+    }));
+  }
+
+  function smoothPath(pts) {
+    const head = pts[0];
+    if (!head) return '';
+    let d = `M ${head.x.toFixed(2)} ${head.y.toFixed(2)}`;
+    for (let i = 0; i < pts.length - 1; i += 1) {
+      const p1 = pts[i], p2 = pts[i + 1];
+      const p0 = pts[i - 1] ?? p1, p3 = pts[i + 2] ?? p2;
+      const c1x = p1.x + (p2.x - p0.x) / 6;
+      const c1y = Math.max(PAD_Y, Math.min(CHART_H - PAD_Y, p1.y + (p2.y - p0.y) / 6));
+      const c2x = p2.x - (p3.x - p1.x) / 6;
+      const c2y = Math.max(PAD_Y, Math.min(CHART_H - PAD_Y, p2.y - (p3.y - p1.y) / 6));
+      d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+    }
+    return d;
+  }
+
+  function chartSvg(values, active, id) {
+    const all = padded(values);
+    const pts = points(all);
+    const line = smoothPath(pts);
+    const area = `${line} L ${CHART_W - PAD_RIGHT} ${CHART_H - PAD_Y} L ${PAD_X} ${CHART_H - PAD_Y} Z`;
+    const last = pts[pts.length - 1];
+    const avgY = (PAD_Y + (1 - AVG / CEILING) * (CHART_H - PAD_Y * 2)).toFixed(2);
+    const opacity = active ? 1 : 0.55;
+    const fillOpacity = active ? 0.22 : 0.12;
+    const dot = active ? `<circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="1.3" fill="${TEAL}"/>` : '';
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${CHART_H}" viewBox="0 0 ${CHART_W} ${CHART_H}" preserveAspectRatio="none">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${TEAL}" stop-opacity="${fillOpacity}"/>
+        <stop offset="100%" stop-color="${TEAL}" stop-opacity="0"/>
+      </linearGradient></defs>
+      <g opacity="${opacity}">
+        <path d="${area}" fill="url(#${id})"/>
+        <path d="${line}" fill="none" stroke="${TEAL}" stroke-opacity="${opacity}" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="${PAD_X}" x2="${CHART_W - PAD_RIGHT}" y1="${avgY}" y2="${avgY}" stroke="${TEAL}" stroke-opacity="${active ? 0.5 : 0.35}" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>
+        <circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="3.2" fill="none" stroke="${TEAL}" stroke-opacity="${opacity}" stroke-width="1.4" vector-effect="non-scaling-stroke"/>
+        ${dot}
+      </g>
+    </svg>`;
+  }
+
+  function speedSvg(speedText, peakText) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="158" height="24" viewBox="0 0 158 24">
+      <path d="M5 2 L1 12 L4.5 12 L4 20 L10 9 L6.5 9 Z" fill="${TEAL}"/>
+      <text x="16" y="18" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="13" font-weight="650" fill="${TEAL}">${speedText}<tspan fill="#8a8a8e" font-weight="400"> t/s</tspan><tspan fill="#8a8a8e" font-weight="400" font-size="11"> · ${peakText}</tspan></text>
+    </svg>`;
+  }
+
+  function spark(values, columns) {
+    const all = padded(values);
+    const cols = Math.max(1, columns);
+    const size = all.length / cols;
+    let out = '';
+    for (let i = 0; i < cols; i += 1) {
+      const a = Math.floor(i * size);
+      const b = Math.max(a + 1, Math.floor((i + 1) * size));
+      let sum = 0;
+      for (let j = a; j < b; j += 1) sum += all[j] ?? 0;
+      const v = sum / (b - a);
+      out += BLOCKS[Math.max(0, Math.min(7, Math.round((v / CEILING) * 7)))];
+    }
+    return out;
+  }
+
+  const active = buildHistory(true);
+  const idle = buildHistory(false);
+
+  document.getElementById('band-active').innerHTML = `
+    <span class="speed">${speedSvg('248.6', '⌀ 205')}</span>
+    <span class="chart">${chartSvg(smoothed(active, 30), true, 'area-active')}</span>
+    <span class="chip">◎ 87%</span>
+    <span class="chip">[█░░░░░░░░░] 2%</span>
+    <span class="chip time">00:13</span>
+    <span class="chip faint">·</span>
+    <span class="action"><span>⌫</span>清图</span>`;
+
+  document.getElementById('band-idle').innerHTML = `
+    <span class="speed">${speedSvg('0.0', '⌀ 205')}</span>
+    <span class="chart">${chartSvg(smoothed(idle, 30), false, 'area-idle')}</span>
+    <span class="chip">◎ 87%</span>
+    <span class="chip">[█░░░░░░░░░] 2%</span>
+    <span class="chip time">00:13</span>
+    <span class="chip faint">·</span>
+    <span class="action"><span>⌫</span>清图</span>`;
+
+  const sparkText = spark(active, 8);
+
+  document.getElementById('band-terminal').innerHTML = `
+    <span class="chip"><span class="mark">⚡</span> 248.6 t/s · ⌀ 205</span>
+    <span class="spark">${sparkText}</span>
+    <span class="chip">◎ 87%</span>
+    <span class="chip">[█░░░░░░░░░] 2%</span>
+    <span class="chip time">00:13</span>
+    <span class="chip faint">·</span>
+    <span class="action"><span>⌫</span>清图</span>`;
+
+  document.getElementById('band-vscode').innerHTML = `
+    <span class="chip"><span class="mark">⚡</span> 248.6 t/s · ⌀ 205</span>
+    <span class="spark">${spark(active, 5)}</span>
+    <span class="chip">◎ 87%</span>
+    <span class="chip">[█░░░░░░░░░] 2%</span>
+    <span class="chip time">00:13</span>
+    <span class="chip faint">·</span>
+    <span class="action"><span>⌫</span>清图</span>`;
+
+  document.getElementById('band-narrow').innerHTML = `
+    <span class="chip"><span class="mark">⚡</span> 248.6 t/s · ⌀ 205</span>
+    <span class="chip">[█░░░░░░░░░] 2%</span>
+    <span class="chip time">00:13</span>
+    <span class="action"><span>⌫</span>清图</span>`;
+
+  function activeRuns(values) {
+    const all = padded(values);
+    const runs = [];
+    let start = -1;
+    for (let i = 0; i < all.length; i += 1) {
+      const on = (all[i] ?? 0) > 0;
+      if (on && start < 0) start = i;
+      if (!on && start >= 0) { runs.push([start, i - 1]); start = -1; }
+    }
+    if (start >= 0) runs.push([start, all.length - 1]);
+    return runs;
+  }
+
+  function pathFor(pts) {
+    return smoothPath(pts);
+  }
+
+  function chartGaps(values, active, id) {
+    const all = padded(values);
+    const pts = points(all);
+    const avgY = (PAD_Y + (1 - AVG / CEILING) * (CHART_H - PAD_Y * 2)).toFixed(2);
+    const parts = activeRuns(all).map(([a, b]) => {
+      const seg = pts.slice(a, b + 1);
+      if (seg.length < 2) return '';
+      const d = pathFor(seg);
+      return `<path d="${d} L ${seg[seg.length - 1].x.toFixed(2)} ${CHART_H - PAD_Y} L ${seg[0].x.toFixed(2)} ${CHART_H - PAD_Y} Z" fill="url(#${id})" stroke="none"/>
+              <path d="${d}" fill="none" stroke="${TEAL}" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>`;
+    }).join('');
+    const last = pts[pts.length - 1];
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${CHART_H}" viewBox="0 0 ${CHART_W} ${CHART_H}" preserveAspectRatio="none">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${TEAL}" stop-opacity=".18"/><stop offset="100%" stop-color="${TEAL}" stop-opacity="0"/>
+      </linearGradient></defs>
+      ${parts}
+      <line x1="${PAD_X}" x2="${CHART_W - PAD_RIGHT}" y1="${avgY}" y2="${avgY}" stroke="${TEAL}" stroke-opacity=".45" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>
+      <circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="3.2" fill="none" stroke="${TEAL}" stroke-width="1.4" vector-effect="non-scaling-stroke"/>
+    </svg>`;
+  }
+
+  function smoothed(values, window) {
+    return values.map((v, i, arr) => {
+      let sum = 0, n = 0;
+      for (let j = Math.max(0, i - window + 1); j <= i; j += 1) {
+        const x = arr[j] ?? 0;
+        if (x > 0) { sum += x; n += 1; }
+      }
+      return n > 0 ? sum / n : 0;
+    });
+  }
+
+  document.getElementById('v-a').innerHTML = chartSvg(active, true, 'area-v-a');
+  document.getElementById('v-b').innerHTML = chartGaps(active, true, 'area-v-b');
+  document.getElementById('v-c').innerHTML = chartSvg(smoothed(active, 30), true, 'area-v-c');
+</script>
+</body>
+</html>

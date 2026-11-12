@@ -11,6 +11,11 @@ const PEAK_FLOOR = 100
 const TICK_MS = 1000
 const HISTORY_MAX = 180
 const CALLS_MAX = 10
+const CALLS_KEEP = 400
+const CURVE_WINDOW = 30
+const AVG_WINDOW_MS = 10 * 60 * 1000
+const AVG_MIN_DECODE_MS = 500
+const AVG_MIN_TOKENS = 20
 const CHART_W = 220
 const CHART_H = 24
 const CHART_X = 158
@@ -25,13 +30,13 @@ const DETACH = 'my $p = fork; exit 0 if $p; POSIX::setsid(); exec { $ARGV[0] } @
 const BLOCKS = '▁▂▃▄▅▆▇█'
 
 const INITIAL: TokenSpeedSnapshot = {
-  version: 1,
+  version: 2,
   speed: null,
+  avgSpeed: null,
   history: [],
   cacheHit: null,
   contextPercent: null,
   peak60m: null,
-  percentOfPeak: null,
   elapsedSec: 0,
   isActive: false,
   hasData: false,
@@ -40,7 +45,7 @@ const INITIAL: TokenSpeedSnapshot = {
 const snap = atom({ plugin: 'token-speed', key: 'snap' } as const, INITIAL)
 
 type Sample = { at: number; tokens: number }
-type Call = { tokens: number; ms: number }
+type Call = { tokens: number; decodeMs: number }
 type PeakSample = { at: number; speed: number }
 
 let turnStartedAt = 0
@@ -49,6 +54,7 @@ let isActive = false
 let hasData = false
 let speed: number | null = null
 let history: number[] = []
+let rawHistory: number[] = []
 let cacheTotals = { input: 0, read: 0, write: 0 }
 let contextPercent: number | null = null
 let calls: Call[] = []
@@ -79,14 +85,46 @@ function estimateTokens(text: string): number {
 }
 
 function rollingSpeed(): number | null {
-  if (calls.length === 0) return null
   let tokens = 0
-  let ms = 0
-  for (const call of calls) {
+  let decode = 0
+  const start = Math.max(0, calls.length - CALLS_MAX)
+  for (let i = start; i < calls.length; i += 1) {
+    const call = calls[i]
+    if (!call) continue
     tokens += call.tokens
-    ms += call.ms
+    decode += call.decodeMs
   }
-  return ms > 0 ? (tokens * 1000) / ms : null
+  return decode > 0 ? (tokens * 1000) / decode : null
+}
+
+// Average over the last ten minutes of generation, weighted by decode time.
+// Idle costs nothing and queueing before the first token is not counted, so a
+// long pause or a slow start cannot drag it down.
+function averageSpeed(): number | null {
+  let tokens = 0
+  let decode = 0
+  for (let i = calls.length - 1; i >= 0; i -= 1) {
+    const call = calls[i]
+    if (!call) continue
+    if (call.decodeMs < AVG_MIN_DECODE_MS || call.tokens < AVG_MIN_TOKENS) continue
+    tokens += call.tokens
+    decode += call.decodeMs
+    if (decode >= AVG_WINDOW_MS) break
+  }
+  return decode > 0 ? (tokens * 1000) / decode : null
+}
+
+function curveValue(values: number[]): number {
+  let sum = 0
+  let count = 0
+  for (let i = Math.max(0, values.length - CURVE_WINDOW); i < values.length; i += 1) {
+    const value = values[i] ?? 0
+    if (value > 0) {
+      sum += value
+      count += 1
+    }
+  }
+  return count > 0 ? sum / count : 0
 }
 
 function notePeak(now: number, value: number): void {
@@ -98,11 +136,6 @@ function notePeak(now: number, value: number): void {
     if (sample.speed > peak) peak = sample.speed
   }
   peak60m = peak
-}
-
-function peakPercent(): number | null {
-  if (peak60m <= 0) return null
-  return Math.max(0, Math.min(100, Math.round(((speed ?? 0) / peak60m) * 100)))
 }
 
 function cacheHitPercent(): number | null {
@@ -209,16 +242,16 @@ function escapeXml(value: string): string {
   }[ch] ?? ch))
 }
 
-function renderSpeedSvg(speedText: string, peakText: string): string {
+function renderSpeedSvg(speedText: string, subText: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${CHART_X}" height="${CHART_H}" viewBox="0 0 ${CHART_X} ${CHART_H}">
 <g>
 <path d="M5 2 L1 12 L4.5 12 L4 20 L10 9 L6.5 9 Z" fill="${ACCENT}"/>
-<text x="16" y="18" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="13" font-weight="650" fill="${ACCENT}">${escapeXml(speedText)}<tspan fill="#8a8a8e" font-weight="400"> t/s</tspan>${peakText ? `<tspan fill="#8a8a8e" font-weight="400" font-size="11"> · ${escapeXml(peakText)}</tspan>` : ''}</text>
+<text x="16" y="18" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="13" font-weight="650" fill="${ACCENT}">${escapeXml(speedText)}<tspan fill="#8a8a8e" font-weight="400"> t/s</tspan>${subText ? `<tspan fill="#8a8a8e" font-weight="400" font-size="11"> · ${escapeXml(subText)}</tspan>` : ''}</text>
 </g>
 </svg>`
 }
 
-function renderChartSvg(values: number[], active: boolean): string {
+function renderChartSvg(values: number[], active: boolean, avg: number | null): string {
   const all = padded(values)
   const ceiling = chartCeiling()
   const points = all.map((v, i) => ({
@@ -231,6 +264,9 @@ function renderChartSvg(values: number[], active: boolean): string {
   if (!last) return ''
   const opacity = active ? 1 : 0.55
   const fillOpacity = active ? 0.22 : 0.12
+  const avgY = avg === null || avg <= 0
+    ? null
+    : PAD_Y + (1 - Math.min(ceiling, avg) / ceiling) * (CHART_H - PAD_Y * 2)
   const dot = active
     ? `<circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="1.3" fill="${ACCENT}"/>`
     : ''
@@ -244,6 +280,7 @@ function renderChartSvg(values: number[], active: boolean): string {
 </linearGradient></defs>
 <g opacity="${opacity}">
 <path d="${area}" fill="url(#ts-area)"/>
+${avgY === null ? '' : `<line x1="${PAD_X}" x2="${CHART_W - PAD_RIGHT}" y1="${avgY.toFixed(2)}" y2="${avgY.toFixed(2)}" stroke="${ACCENT}" stroke-opacity="${active ? 0.45 : 0.3}" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`}
 <path d="${line}" fill="none" stroke="${ACCENT}" stroke-opacity="${opacity}" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
 <circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="3.2" fill="none" stroke="${ACCENT}" stroke-opacity="${opacity}" stroke-width="1.4" vector-effect="non-scaling-stroke"/>
 ${dot}
@@ -257,13 +294,13 @@ async function writeSnapshot($: EngineInterface, now?: number): Promise<void> {
     ? Math.max(0, Math.floor((at - turnStartedAt) / 1000))
     : lastTurnSec
   const next: TokenSpeedSnapshot = {
-    version: 1,
+    version: 2,
     speed,
+    avgSpeed: averageSpeed(),
     history: history.slice(),
     cacheHit: cacheHitPercent(),
     contextPercent,
     peak60m: peak60m > 0 ? peak60m : null,
-    percentOfPeak: peakPercent(),
     elapsedSec: elapsed,
     isActive,
     hasData,
@@ -277,7 +314,9 @@ async function tick($: EngineInterface): Promise<void> {
   const now = await $.clock.now()
   const active = isActive && turnStartedAt > 0
   const live = active ? liveSpeed(now) : null
-  history.push(active ? (live ?? 0) : 0)
+  rawHistory.push(active ? (live ?? 0) : 0)
+  if (rawHistory.length > HISTORY_MAX) rawHistory.shift()
+  history.push(curveValue(rawHistory))
   if (history.length > HISTORY_MAX) history.shift()
 
   const rolling = callsThisTurn > 0 ? rollingSpeed() : null
@@ -323,6 +362,7 @@ function resetSession(): void {
   hasData = false
   speed = null
   history = []
+  rawHistory = []
   cacheTotals = { input: 0, read: 0, write: 0 }
   contextPercent = null
   calls = []
@@ -346,11 +386,12 @@ async function observe($: EngineInterface, chunk: TurnStepChunk): Promise<void> 
     const usage = chunk.usage
     const tokens = usage?.output_tokens ?? Math.round(stepTokens)
     const ms = stepStartedAt > 0 ? Math.max(1, now - stepStartedAt) : 0
+    const decodeMs = firstTokenAt > 0 ? Math.max(1, now - firstTokenAt) : ms
 
-    if (tokens > 0 && ms > 0) {
-      calls.push({ tokens, ms })
+    if (tokens > 0 && decodeMs > 0) {
+      calls.push({ tokens, decodeMs })
       callsThisTurn += 1
-      if (calls.length > CALLS_MAX) calls.shift()
+      if (calls.length > CALLS_KEEP) calls.shift()
     }
     if (usage) {
       cacheTotals.input += usage.input_tokens
@@ -382,12 +423,12 @@ async function observe($: EngineInterface, chunk: TurnStepChunk): Promise<void> 
   if (added <= 0) return
 
   stepTokens += added
+  if (firstTokenAt === 0) firstTokenAt = await $.clock.now()
   chunksSinceSample += 1
   if (chunksSinceSample < 8) return
   chunksSinceSample = 0
 
   const now = await $.clock.now()
-  if (firstTokenAt === 0) firstTokenAt = now
   samples.push({ at: now, tokens: stepTokens })
   while (samples.length > 1) {
     const head = samples[0]
@@ -616,13 +657,11 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const s = await read($, snap)
-    if (s.version !== 1 || !s.hasData) return next(e)
+    if (s.version !== 2 || !s.hasData) return next(e)
     const managed = isManagedInstall($.plugin.root)
 
     const speedText = s.speed === null ? '—' : s.speed.toFixed(1)
-    const peakText = s.percentOfPeak === null || s.peak60m === null
-      ? ''
-      : `${s.percentOfPeak}% of ${Math.round(s.peak60m)}`
+    const avgText = s.avgSpeed === null ? '—' : String(Math.round(s.avgSpeed))
     const cacheText = s.cacheHit === null ? '—' : `${Math.round(s.cacheHit)}%`
     const ctxText = s.contextPercent === null ? '—' : `${Math.round(s.contextPercent)}%`
     const ctxBar = contextBar(s.contextPercent)
@@ -634,12 +673,15 @@ export const register: Register = on => {
     if (e.surface !== 'desktop') {
       const { Box, Text, Button } = $.ui.resolve(e)
       const columns = typeof e.props.bodyColumns === 'number' ? e.props.bodyColumns : 120
-      const sparkColumns = Math.max(12, Math.min(64, columns - 60))
+      const sparkColumns = Math.max(12, Math.min(64, columns - 66))
+      const isTerminal = e.surface === 'terminal'
+      const showSpark = isTerminal || columns >= 80
+      const showCache = isTerminal || columns >= 64
       return (
         <Box width="100%" justifyContent="flex-end" alignItems="center" gap="sm" flexWrap="nowrap" overflow="hidden">
-          <Text color="text" dimColor={!s.isActive} wrap="truncate">⚡ {speedText} t/s{s.percentOfPeak === null ? '' : ` · ${s.percentOfPeak}%`}</Text>
-          <Text dimColor>{blockSpark(s.history, sparkColumns)}</Text>
-          <Text dimColor wrap="truncate">◎ {cacheText}</Text>
+          <Text color="text" dimColor={!s.isActive} wrap="truncate">⚡ {speedText} t/s · ⌀ {avgText}</Text>
+          {showSpark ? <Text dimColor>{blockSpark(s.history, sparkColumns)}</Text> : null}
+          {showCache ? <Text dimColor wrap="truncate">◎ {cacheText}</Text> : null}
           <Text dimColor wrap="truncate">[{ctxBar}] {ctxText}</Text>
           <Text dimColor>{timerText}</Text>
           <Text dimColor>·</Text>
@@ -655,16 +697,16 @@ export const register: Register = on => {
       <Box width="100%" alignItems="center" gap="sm" flexWrap="nowrap" overflow="hidden">
         <Box flexShrink={0}>
           <Svg
-            source={renderSpeedSvg(speedText, peakText)}
-            alt={`Current ${speedText} tokens per second${s.percentOfPeak === null ? '' : `, ${s.percentOfPeak}% of the 60-minute peak`}`}
+            source={renderSpeedSvg(speedText, `⌀ ${avgText}`)}
+            alt={`Current ${speedText} tokens per second, 10-minute average ${avgText}`}
             width={CHART_X}
             height={CHART_H}
           />
         </Box>
         <Box flexGrow={1} flexShrink={1} minWidth={0}>
           <Svg
-            source={renderChartSvg(s.history, s.isActive)}
-            alt="Token speed over the last 3 minutes"
+            source={renderChartSvg(s.history, s.isActive, s.avgSpeed)}
+            alt="Token speed over the last 3 minutes, averaged over 30 seconds; the dashed line is the 10-minute average"
             height={CHART_H}
           />
         </Box>

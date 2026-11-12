@@ -1,11 +1,11 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.3.0-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.4.0-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
 
-**在 Claude Code / Claude Desktop 输入框上沿显示实时 token 速度及其占过去 60 分钟峰值的比例、3 分钟历史曲线、缓存命中率、上下文占用和本轮计时，并提供一键清理历史截图。**
+**在 Claude Code / Claude Desktop 输入框上沿显示实时 token 速度和稳定的 10 分钟平均、3 分钟历史曲线、缓存命中率、上下文占用和本轮计时，并提供一键清理历史截图。**
 
 [English](README.md) · [更新日志](CHANGELOG.md)
 
@@ -17,8 +17,8 @@
 
 | 片段 | 含义 |
 |---|---|
-| `⚡ 360.1 t/s · 76% of 472` | 当前速度及其占 60 分钟峰值（`472 t/s`）的比例；轮次之间显示 `0.0 t/s · 0%`。 |
-| 3 分钟曲线 | 每秒一个采样，平滑 SVG 曲线带端点；纵轴固定在 60 分钟峰值，空闲秒回落到基线。曲线随 band 宽度压缩或拉长，速度数字保持原大小。 |
+| `⚡ 360.1 t/s · ⌀ 205` | 当前速度和 10 分钟平均（`205 t/s`）。轮次之间当前速度显示 `0.0 t/s`，平均保持不变。 |
+| 3 分钟曲线 | 每秒一个采样，每个点取最近 30 秒生成速度的平均，平滑 SVG 曲线带端点；虚线标出 10 分钟平均。纵轴固定在 60 分钟峰值，空闲秒回落到基线。曲线随 band 宽度压缩或拉长，速度数字保持原大小。 |
 | `◎ 87%` | 会话级 prompt 缓存命中率。提供方还没报告缓存读取时显示 `—`。 |
 | `[██████░░░░] 42%` | 上下文窗口占用与百分比。首轮完成前显示 `—`。 |
 | `01:23` | 本轮计时；本轮结束后冻结在最终时长。 |
@@ -51,9 +51,9 @@ claude plugin install token-speed --marketplace hermanzhaozzzz/claude-token-spee
 
 ## 数字怎么算
 
-- **速度** — Hermes 口径：`最近 ≤10 次调用的 output_tokens 之和 / 这些调用的 API 耗时之和`。单次耗时从请求发出到最后一个 chunk，包含首字延迟。每轮第一次调用完成前使用 3 秒实时估算；轮次之间显示 `0.0 t/s`，不继承上一轮读数。
-- **峰值比例** — `当前速度 / 过去 60 分钟内最高的 1 秒采样`，封顶 100%。峰值为滑动窗口：旧采样滑出 60 分钟后，比例自动按新的最高值重新标定。
-- **历史** — 每秒采样一次，保留最近 180 个点（3 分钟）；曲线纵轴取 60 分钟峰值并向上取整到 50 t/s（最低 100），生成段在整小时内可以直接比较，不再各自缩放。空闲秒记为 `0`，因此能看出生成与停顿的分布。
+- **速度** — `最近 ≤10 次调用的 output_tokens 之和 / 这些调用的解码耗时之和`。单次解码耗时从第一个内容 chunk 到最后一个，排队等首字节不算在内。每轮第一次调用完成前使用 3 秒实时估算；轮次之间显示 `0.0 t/s`，不继承上一轮读数。
+- **平均** — `output_tokens 之和 / 解码耗时之和`，窗口是最近 10 分钟的**生成时长**：从最新一次调用往前累加，直到解码时间合计 600 秒。解码不足 500 ms 或不足 20 token 的调用不计入。空闲秒既不产生 token 也不产生解码时间，永远不进分母，所以停顿和轮次之间它都不会掉，只有模型真的变慢才会下降；只在会话开始时清零，`prompt.submit` 不会重置。
+- **历史** — 每秒采样一次，保留最近 180 个点（3 分钟）；每个显示点是最近 30 秒内非零采样的平均，所以轮内停顿不会把曲线拉下去。曲线纵轴取 60 分钟峰值并向上取整到 50 t/s（最低 100），生成段在整小时内可以直接比较；虚线是 10 分钟平均。
 - **缓存命中** — `cache_read / (input + cache_read + cache_creation)`，按会话累计；提供方没有缓存读取时显示 `—`。
 - **上下文** — 取 `$.session.usage()` 的 `context.percent`，每 2 秒和每轮结束时刷新。
 - **计时** — 从 `turn.start` 到 `turn.complete` 的墙钟时间，每秒更新。
@@ -121,8 +121,11 @@ types/index.d.ts             状态契约
 |---|---|---|
 | `ACCENT` | `#3AA99A` | 数字、曲线、渐变和端点共用的雾青；数字与曲线在同一个 SVG 里，颜色完全一致。 |
 | `WINDOW_MS` | `3000` | 首次调用完成前的实时估算窗口。 |
-| `PEAK_WINDOW_MS` | `3600000` | 峰值比例和曲线纵轴使用的滑动窗口。 |
+| `PEAK_WINDOW_MS` | `3600000` | 曲线纵轴使用的峰值滑动窗口。 |
 | `PEAK_FLOOR` | `100` | 还没有峰值时的最低纵轴。 |
+| `AVG_WINDOW_MS` | `600000` | 10 分钟平均累计的生成时长。 |
+| `AVG_MIN_DECODE_MS` / `AVG_MIN_TOKENS` | `500` / `20` | 样本太短的调用不计入平均。 |
+| `CURVE_WINDOW` | `30` | 曲线每个点平均多少秒的生成速度。 |
 | `HISTORY_MAX` | `180` | 曲线采样数；180 × 1 秒 = 3 分钟。 |
 | 曲线上限 | 60 分钟峰值 | 向上取整到 50 t/s，最低为 `PEAK_FLOOR`。 |
 | `CHART_W` / `CHART_H` | `220` / `24` | 曲线 viewBox 与高度。实际宽度跟随 band 剩余空间；速度文字在自己的固定宽度 SVG 里，不缩放。 |
@@ -138,7 +141,7 @@ claude plugin validate .
 - **没有显示** — 它在 `turn.start` 时出现，先发一条消息试试；刚安装的话执行 `/reload-plugins` 或重启桌面版。
 - **轮次之间显示 `0.0 t/s`** — 正常：数字跟随当前轮次，不保留上一轮的读数；最近几次生成仍在 3 分钟曲线里。
 - **缓存或上下文显示 `—`** — 提供方还没报告该值（没有缓存读取，或首轮尚未完成），后续轮次会补上。
-- **终端或 VS Code 里没有曲线** — 只有桌面版画曲线：终端不支持 `Svg`，VS Code 的 webview 会把每张 `Svg` 异步栅格化、超时就改画 `alt` 文本，所以这两个界面都退回 36 列块字符曲线，峰值比例以紧凑的 `· 76%` 显示，其余部分不变。
+- **终端或 VS Code 里没有曲线** — 只有桌面版画曲线：终端不支持 `Svg`，VS Code 的 webview 会把每张 `Svg` 异步栅格化、超时就改画 `alt` 文本，所以这两个界面都用块字符曲线，读数同样是 `⚡ 360.1 t/s · ⌀ 205`；面板变窄时先去掉块曲线、再去掉缓存，保证数字不被裁。 
 - **桌面版升级后消失** — 运行 `claude plugin validate .`，查看会话提示；每周 CI 就是为了尽早发现这类问题。
 
 ## 隐私

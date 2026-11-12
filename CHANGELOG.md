@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0 — 2026-11-12
+
+- The reading is now `⚡ 248.6 t/s · ⌀ 205`: the share of the 60-minute peak is replaced by a **10-minute average** that reflects how the provider has actually been performing. The average divides tokens by **decode time** (first content chunk to the last), over the last 600 s of generation, so queueing before the first token never counts; idle seconds produce neither tokens nor decode time, so they never enter the denominator and the number holds through pauses and between turns. It resets only when a session starts.
+- Speed now uses the same decode time, so the current number and the average are comparable: a call that waited 60 s for its first token no longer looks slow.
+- The curve is smoothed: each point is the mean of the last 30 seconds of generation, so pauses inside a turn no longer pull it down, and a dashed line marks the 10-minute average at the same scale. The y-axis is still the 60-minute peak, which is now used only for that scale.
+- On narrow terminal and VS Code panels the block sparkline and then the cache segment drop out, so the speed and the average stay visible.
+
 ## 1.3.0 — 2026-11-12
 
 - Draw the chart only in the desktop. The VS Code extension now uses the same text band as the terminal (speed, block sparkline, cache, context, timer and 清图): the editor's webview rasterizes every `Svg` asynchronously and swaps in its `alt` text whenever a draw misses its deadline, so a band that redrew its curve every second eventually collapsed into wrapped alt text. Reloading the plugin only cleared it for a while.
