@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0 — 2026-11-12
+
+- Draw the chart only in the desktop. The VS Code extension now uses the same text band as the terminal (speed, block sparkline, cache, context, timer and 清图): the editor's webview rasterizes every `Svg` asynchronously and swaps in its `alt` text whenever a draw misses its deadline, so a band that redrew its curve every second eventually collapsed into wrapped alt text. Reloading the plugin only cleared it for a while.
+- The 清图 button only offers the desktop setup pane on the desktop surface; in the VS Code extension it cleans directly, as in the terminal.
+
 ## 1.2.9 — 2026-11-11
 
 - The one-command installer only uninstalls the user-scope plugin and marketplace when they are actually installed, and says so; a clean machine no longer prints two red `✘ Failed to uninstall` lines that look like errors.

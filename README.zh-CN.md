@@ -1,6 +1,6 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.2.9-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.3.0-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
@@ -138,7 +138,7 @@ claude plugin validate .
 - **没有显示** — 它在 `turn.start` 时出现，先发一条消息试试；刚安装的话执行 `/reload-plugins` 或重启桌面版。
 - **轮次之间显示 `0.0 t/s`** — 正常：数字跟随当前轮次，不保留上一轮的读数；最近几次生成仍在 3 分钟曲线里。
 - **缓存或上下文显示 `—`** — 提供方还没报告该值（没有缓存读取，或首轮尚未完成），后续轮次会补上。
-- **终端里没有曲线** — 终端不支持 `Svg`，会自动退回 36 列块字符曲线，峰值比例以紧凑的 `· 76%` 显示，其余部分不变。
+- **终端或 VS Code 里没有曲线** — 只有桌面版画曲线：终端不支持 `Svg`，VS Code 的 webview 会把每张 `Svg` 异步栅格化、超时就改画 `alt` 文本，所以这两个界面都退回 36 列块字符曲线，峰值比例以紧凑的 `· 76%` 显示，其余部分不变。
 - **桌面版升级后消失** — 运行 `claude plugin validate .`，查看会话提示；每周 CI 就是为了尽早发现这类问题。
 
 ## 隐私

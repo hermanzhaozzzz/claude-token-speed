@@ -397,7 +397,7 @@ async function observe($: EngineInterface, chunk: TurnStepChunk): Promise<void> 
 }
 
 async function cleanImages($: EngineInterface, surface: string, managed: boolean): Promise<void> {
-  if (surface !== 'terminal' && !managed) {
+  if (surface === 'desktop' && !managed) {
     await $.ui.open({
       id: SETUP_PANE,
       title: 'token-speed 桌面设置',
@@ -628,7 +628,10 @@ export const register: Register = on => {
     const ctxBar = contextBar(s.contextPercent)
     const timerText = formatTime(s.elapsedSec)
 
-    if (e.surface === 'terminal') {
+    // Only the desktop draws the chart: the VS Code webview rasterizes each
+    // Svg asynchronously and swaps in its alt text when a draw misses its
+    // deadline, which tears the row apart once the band redraws every second.
+    if (e.surface !== 'desktop') {
       const { Box, Text, Button } = $.ui.resolve(e)
       const columns = typeof e.props.bodyColumns === 'number' ? e.props.bodyColumns : 120
       const sparkColumns = Math.max(12, Math.min(64, columns - 60))

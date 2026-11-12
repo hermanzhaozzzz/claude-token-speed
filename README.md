@@ -1,6 +1,6 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.2.9-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.3.0-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
@@ -138,7 +138,7 @@ claude plugin validate .
 - **The band is empty** — it appears from `turn.start`; send a prompt. If you just installed it, run `/reload-plugins` or restart the desktop app.
 - **`0.0 t/s` between turns** — expected: the number follows the current turn, not the last one. The 3-minute curve keeps the recent generations.
 - **`—` for cache or context** — the provider has not reported the value yet (no cache reads, or the first turn has not completed). The row fills in on later turns.
-- **Terminal instead of desktop** — terminals have no `Svg`, so the plugin falls back to a 36-column block sparkline and a compact `· 76%` peak share; the rest of the row is unchanged.
+- **Terminal or VS Code instead of desktop** — only the desktop draws the chart. The terminal has no `Svg`, and the VS Code webview rasterizes each `Svg` asynchronously and falls back to its alt text when a draw misses its deadline, so both surfaces get the 36-column block sparkline and a compact `· 76%` peak share instead; the rest of the row is unchanged.
 - **The row disappeared after an app update** — run `claude plugin validate .` and check the session notice. The weekly CI job is there to catch this early.
 
 ## Privacy
