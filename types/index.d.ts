@@ -5,6 +5,7 @@ export type TokenSpeedSnapshot = {
   history: number[]
   cacheHit: number | null
   contextPercent: number | null
+  imageCount: number | null
   peak60m: number | null
   elapsedSec: number
   isActive: boolean

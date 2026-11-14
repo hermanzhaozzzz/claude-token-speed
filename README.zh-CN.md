@@ -1,6 +1,6 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.4.0-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.5.0-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
@@ -22,7 +22,7 @@
 | `◎ 87%` | 会话级 prompt 缓存命中率。提供方还没报告缓存读取时显示 `—`。 |
 | `[██████░░░░] 42%` | 上下文窗口占用与百分比。首轮完成前显示 `—`。 |
 | `01:23` | 本轮计时；本轮结束后冻结在最终时长。 |
-| ⌫ 清图 | band 最右端、计时后面的按钮。本地去掉较早 tool-result 行里的图片（不调用模型），用于已经超过上游请求体上限的会话。 |
+| `▣ 12` | band 最右端、计时后面的清图按钮。数字是当前上下文里的图片张数（没有图片时只显示图标）。点它只会弹出确认，点「清理图片」才真正清理；清理在本地去掉较早 tool-result 行里的图片，不调用模型，用于已经超过上游请求体上限的会话。 |
 
 模型空闲时整行变暗、曲线端点变成空心。第一轮开始时出现，轮次之间保留，便于比较最近几次生成；本轮结束时速度归零为 `0.0 t/s`。
 
@@ -62,12 +62,14 @@ claude plugin install token-speed --marketplace hermanzhaozzzz/claude-token-spee
 
 会话里读过的截图以 base64 留在上下文中，每次请求都会重新发送。读得多了，请求体会超过上游的 body 上限（私有部署常见在几十 MB 量级），普通请求和 `/compact` 都会返回 `400 ... length limit exceeded`。
 
-band 最右端的 **⌫ 清图** 按钮用来处理这种情况：
+band 最右端的 **▣** 按钮用来处理这种情况：
 
+- 旁边的数字是当前上下文里的图片张数，统计 `$.session.messages({ as: "api" })` 里的 image block（包括 tool result 内部的），也就是下一次请求会带上的数量；回合结束时和每次点按钮时刷新。
+- 点按钮不会直接清理：先弹出确认框，写明当前有几张、会保留什么，只有点「清理图片」才执行；「取消」、Esc 或点空白处关闭，默认焦点停在「取消」。
 - 它通过引擎的 `session.compact` hook 直接返回一份去掉图片的消息列表。这是**本地压缩：不调用模型、不发请求**，所以即使当前请求体已经超限也能用。
 - 保留第一条、最近 8 条，以及更早的 assistant 消息和 user prompt 原样，所以 thinking 和用户附带的 PDF 不会丢。
 - 只有更早的 **tool-result** 行会被重建：去掉其中存储的截图字节；原始图片文件不受影响。
-- 本轮正在生成时按钮会提示等本轮结束；没有更早的消息时会提示无内容可清理。
+- 本轮正在生成时按钮会提示等本轮结束；没有图片时会提示无内容可清理。
 - 清理后无法撤销；需要重新看图时重新 Read 即可。
 
 按钮触发的是引擎的 compact 事件，但插件会把它截住：**不调用模型、不做总结**。对话并没有被压缩或概括——只去掉更早的 tool-result 截图；第一条、最近 8 条、assistant 的 thinking 和 user prompt 都原样保留。会话里仍会出现引擎的 “Compacted” 提示，因为按钮走的就是这个事件；它不代表上下文被总结了。手动敲 `/compact` 不一样：那次请求不会被截住，会走正常的模型总结，历史很大时仍然可能失败。

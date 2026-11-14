@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0 — 2026-11-14
+
+- The right end of the band shows **▣** and the number of images in the session's context, instead of the `⌫ 清图` text button. The count reads `$.session.messages({ as: "api" })` and includes images inside tool results, so it is what the next request would carry; it refreshes on turn completion and whenever the button is pressed. With no images the icon shows alone in a dimmer state.
+- Pressing the button no longer cleans anything. It opens a confirmation pane that says how many images there are, that only older messages lose them, and that this cannot be undone; **取消** holds the focus, Esc or a click outside closes it, and only **清理图片** runs the cleanup. The pane works in the terminal and in the desktop.
+- The button tells you when there is nothing to clean instead of opening an empty confirmation.
+
 ## 1.4.0 — 2026-11-12
 
 - The reading is now `⚡ 248.6 t/s · ⌀ 205`: the share of the 60-minute peak is replaced by a **10-minute average** that reflects how the provider has actually been performing. The average divides tokens by **decode time** (first content chunk to the last), over the last 600 s of generation, so queueing before the first token never counts; idle seconds produce neither tokens nor decode time, so they never enter the denominator and the number holds through pauses and between turns. It resets only when a session starts.

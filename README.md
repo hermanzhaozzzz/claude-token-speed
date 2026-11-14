@@ -1,11 +1,11 @@
 # token-speed
 
-[![version](https://img.shields.io/badge/version-1.4.0-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
+[![version](https://img.shields.io/badge/version-1.5.0-3AA99A)](https://github.com/hermanzhaozzzz/claude-token-speed/releases)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.322-3AA99A)](https://code.claude.com/docs/en/plugins/mods/interface)
 [![license](https://img.shields.io/badge/license-MIT-3AA99A)](LICENSE)
 [![validate](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml/badge.svg)](https://github.com/hermanzhaozzzz/claude-token-speed/actions/workflows/validate.yml)
 
-**Live token speed next to a stable 10-minute average, a 3-minute history curve, cache hit rate, context usage, and the current turn timer — above the prompt in Claude Code and Claude Desktop, plus a one-click image cleanup for long sessions.**
+**Live token speed next to a stable 10-minute average, a 3-minute history curve, cache hit rate, context usage, and the current turn timer — above the prompt in Claude Code and Claude Desktop, plus an image count and a confirmed image cleanup for long sessions.**
 
 [中文](README.zh-CN.md) · [Changelog](CHANGELOG.md)
 
@@ -22,7 +22,7 @@ One compact row, right-aligned on the band above the input box:
 | `◎ 87%` | Session prompt-cache hit rate. Shows `—` until the provider reports cache reads. |
 | `[██████░░░░] 42%` | Context-window usage and percentage. Shows `—` until the first usage report. |
 | `01:23` | Current turn timer. Freezes at the final duration when the turn ends. |
-| ⌫ 清图 | A button at the right end of the band, after the timer. Removes images from older tool-result rows locally (no model call), for sessions that have outgrown the provider's request-body limit. |
+| `▣ 12` | Image cleanup at the right end of the band, after the timer. The number counts the images in the session's context (the icon alone when there are none). Pressing it opens a confirmation; only **清理图片** removes anything. Cleanup drops images from older tool-result rows locally, with no model call, for sessions that have outgrown the provider's request-body limit. |
 
 The row dims and the endpoint becomes hollow when the model is idle. It appears when the first turn starts and stays visible between turns, so you can compare the last few generations; the speed itself drops to `0.0 t/s` as soon as a turn ends.
 
@@ -56,14 +56,16 @@ Reload an existing session with `/reload-plugins`, or restart the desktop app.
 - **History** — The session samples the current speed once per second and keeps the last 180 samples (3 minutes). Each displayed point is the mean of the non-zero samples in the last 30 seconds, so a pause inside a turn does not pull the curve down. The chart's y-axis is the 60-minute peak rounded up to the next 50 t/s (minimum 100), so bursts stay comparable across the hour instead of each burst rescaling the axis; the dashed line is the 10-minute average.
 - **Cache hit** — `cache_read / (input + cache_read + cache_creation)`, accumulated over the session. It is omitted (`—`) until the provider reports a cache read.
 - **Context** — `context.percent` from `$.session.usage()`, refreshed every 2 seconds and on turn completion.
+- **Images** — The count next to `▣` comes from the image blocks in `$.session.messages({ as: "api" })`, including the ones inside a tool result, so it is what the next request would carry. It refreshes on turn completion and whenever the button is pressed.
 - **Timer** — Wall-clock time from `turn.start` to `turn.complete`, updated once per second.
 
 ## Clean images from a long session
 
 Screenshots read into a session stay in its context as base64, and every request resends them. After enough of them, the request body can exceed a provider's size limit — private deployments often cap it at a few tens of MB — and both normal turns and `/compact` fail with `400 ... length limit exceeded`.
 
-The **⌫ 清图** button at the right end of the band handles that:
+The **▣** button at the right end of the band handles that:
 
+- The count beside it is how many images the session's context holds. Pressing the button does not clean anything: it opens a confirmation that says how many images there are and what will be kept, and only **清理图片** runs the cleanup. **取消**, Esc or clicking outside closes it.
 - It answers the engine's `session.compact` hook with a message list that has the images removed. That is a **local compaction: no model call and no request**, so it still works after the current request body is over the limit.
 - It keeps the first message, the newest 8 messages, and every older assistant message and user prompt as they are, so thinking and attachments such as PDFs survive.
 - Only older **tool-result** rows are rebuilt: that drops the stored screenshot bytes, and the original image files are untouched.

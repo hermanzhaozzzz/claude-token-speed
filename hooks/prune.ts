@@ -3,6 +3,29 @@ import type { SessionMessage } from 'claude-code'
 export const KEEP_LAST = 8
 
 /**
+ * Counts the image blocks in an api-shaped transcript, including the ones a
+ * tool_result carries inside its own `content` list.
+ */
+export function countImages(messages: readonly { content?: unknown }[]): number {
+  let total = 0
+  for (const message of messages) {
+    if (Array.isArray(message.content)) total += countIn(message.content)
+  }
+  return total
+}
+
+function countIn(blocks: readonly unknown[]): number {
+  let total = 0
+  for (const block of blocks) {
+    if (!block || typeof block !== 'object') continue
+    const record = block as { type?: unknown; content?: unknown }
+    if (record.type === 'image') total += 1
+    if (Array.isArray(record.content)) total += countIn(record.content)
+  }
+  return total
+}
+
+/**
  * Drops stored images from older tool-result rows.
  *
  * Assistant messages and user prompts are kept whole, with their handles, so

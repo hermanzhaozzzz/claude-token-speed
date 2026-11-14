@@ -2,7 +2,7 @@ import type { On, SessionMessage } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { KEEP_LAST, pruneMessages } from '../hooks/prune'
+import { KEEP_LAST, countImages, pruneMessages } from '../hooks/prune'
 
 function message(
   role: 'user' | 'assistant',
@@ -25,15 +25,44 @@ const BAND = {
   view: {},
 }
 
-function baseStubs(on: On): void {
+function baseStubs(on: On, images = 0): void {
   mock.clock(on)
   on('session.start', () => ({ cwd: '/work' }))
   on('ui.status', () => ({ value: undefined }))
   on('session.usage', () => ({
     value: { context: { window: 100000, percent: 10 }, rateLimits: [] },
   }))
+  on('session.messages', () => ({ value: images > 0 ? apiWithImages(images) : [] }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
+}
+
+function apiWithImages(count: number) {
+  return [{
+    role: 'user' as const,
+    content: Array.from({ length: count }, () => ({
+      type: 'tool_result',
+      tool_use_id: 't',
+      content: [{ type: 'image', source: { data: 'AAAA' } }],
+    })),
+  }]
+}
+
+async function mountCleanPane($: Engine) {
+  return $.ui.mount({
+    plugin: 'token-speed',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'token-speed-clean',
+    props: {
+      title: '清理会话中的图片',
+      isFocused: true,
+      bodyColumns: 92,
+      placement: 'inline',
+      scroll: { offset: 0, bodyRows: 10 },
+      view: {},
+    },
+  })
 }
 
 async function startSession($: Engine, active: boolean): Promise<void> {
@@ -179,8 +208,10 @@ test('the clean button asks the built-in compact to run', async ($, on) => {
       return { text: 'compacted' }
     })
   })
-  baseStubs(on)
+  baseStubs(on, 2)
   on('ui.toast', () => ({ value: undefined }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.close', () => ({ value: undefined }))
   await startSession($, false)
 
   const ui = await $.ui.mount({
@@ -189,10 +220,15 @@ test('the clean button asks the built-in compact to run', async ($, on) => {
     component: 'AbovePrompt',
     props: BAND,
   })
-  expect(await ui.find({ key: 'clean-images' })).toBeDefined()
+  expect((await ui.find({ key: 'clean-images' }))?.text).toBe('▣ 2')
   await ui.press({ key: 'clean-images' })
+  expect(command).toBe('')
+
+  const pane = await mountCleanPane($)
+  await pane.press({ key: 'clean-confirm' })
   await called
   expect(command).toBe('compact')
+  await pane.unmount()
   await ui.unmount()
 })
 
@@ -232,8 +268,10 @@ test('the clean button prunes the conversation through session.compact', async (
     release = resolve
   })
   on('command.run', () => pending.then(() => ({ text: 'compacted' })))
-  baseStubs(on)
+  baseStubs(on, 1)
   on('ui.toast', () => ({ value: undefined }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.close', () => ({ value: undefined }))
   await startSession($, false)
 
   const messages: SessionMessage[] = [
@@ -255,6 +293,8 @@ test('the clean button prunes the conversation through session.compact', async (
     props: BAND,
   })
   await ui.press({ key: 'clean-images' })
+  const pane = await mountCleanPane($)
+  await pane.press({ key: 'clean-confirm' })
 
   const result = await $.session.compact({ trigger: 'manual', messages })
   const pruned = result.messages
@@ -265,6 +305,7 @@ test('the clean button prunes the conversation through session.compact', async (
   expect(pruned?.at(-1)?.handle).toBe('h10')
 
   release()
+  await pane.unmount()
   await ui.unmount()
 })
 
@@ -291,6 +332,87 @@ test('the clean button opens the desktop setup pane', async ($, on) => {
   await ui.press({ key: 'clean-images' })
   expect(opened).toContain('token-speed-setup')
   expect(commands).toBe(0)
+  await ui.unmount()
+})
+
+test('counts images inside tool_result content', () => {
+  const messages = [
+    { content: [{ type: 'text', text: 'hi' }] },
+    {
+      content: [{
+        type: 'tool_result',
+        content: [
+          { type: 'text', text: 'read' },
+          { type: 'image', source: { data: 'AAAA' } },
+          { type: 'image', source: { data: 'BBBB' } },
+        ],
+      }],
+    },
+    { content: [{ type: 'image', source: { data: 'CCCC' } }] },
+  ]
+  expect(countImages(messages)).toBe(3)
+})
+
+test('the clean button opens the confirm pane and waits for a second press', async ($, on) => {
+  const opened: string[] = []
+  let commands = 0
+  on('ui.open', ($hook, e) => {
+    opened.push(e.id)
+    return { value: { isPlaced: true } }
+  })
+  on('command.run', () => {
+    commands += 1
+    return { text: '' }
+  })
+  baseStubs(on, 3)
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.close', () => ({ value: undefined }))
+  await startSession($, false)
+
+  const ui = await $.ui.mount({
+    plugin: 'token-speed',
+    surface: 'terminal',
+    component: 'AbovePrompt',
+    props: BAND,
+  })
+  await ui.press({ key: 'clean-images' })
+  expect(opened).toContain('token-speed-clean')
+  expect(commands).toBe(0)
+
+  const pane = await mountCleanPane($)
+  await pane.press({ key: 'clean-cancel' })
+  expect(commands).toBe(0)
+  await pane.unmount()
+  await ui.unmount()
+})
+
+test('the clean button says so when there is no image to remove', async ($, on) => {
+  let toast = ''
+  let opened = 0
+  const toasted = new Promise<void>(resolve => {
+    on('ui.toast', ($hook, e) => {
+      toast = e.text
+      resolve()
+      return { value: undefined }
+    })
+  })
+  on('ui.open', () => {
+    opened += 1
+    return { value: { isPlaced: true } }
+  })
+  baseStubs(on)
+  await startSession($, false)
+
+  const ui = await $.ui.mount({
+    plugin: 'token-speed',
+    surface: 'terminal',
+    component: 'AbovePrompt',
+    props: BAND,
+  })
+  await ui.press({ key: 'clean-images' })
+  await toasted
+  expect(toast).toBe('上下文里没有图片可清理')
+  expect(opened).toBe(0)
   await ui.unmount()
 })
 

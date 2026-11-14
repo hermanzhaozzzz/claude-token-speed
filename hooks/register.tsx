@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer, TurnStepChunk } from 'claude-code'
 
 import type { TokenSpeedSnapshot } from '../types'
-import { KEEP_LAST, pruneMessages } from './prune'
+import { KEEP_LAST, countImages, pruneMessages } from './prune'
 
 const ACCENT = '#3AA99A'
 const WINDOW_MS = 3000
@@ -24,6 +24,7 @@ const PAD_RIGHT = 6
 const PAD_Y = 2
 const MANAGED_ROOT = '/Library/Application Support/ClaudeCode/token-speed-market/plugin'
 const SETUP_PANE = 'token-speed-setup'
+const CLEAN_PANE = 'token-speed-clean'
 const SETUP_STATUS = '/tmp/token-speed-setup.status'
 const DETACH = 'my $p = fork; exit 0 if $p; POSIX::setsid(); exec { $ARGV[0] } @ARGV; exit 127'
 
@@ -36,6 +37,7 @@ const INITIAL: TokenSpeedSnapshot = {
   history: [],
   cacheHit: null,
   contextPercent: null,
+  imageCount: null,
   peak60m: null,
   elapsedSec: 0,
   isActive: false,
@@ -57,6 +59,7 @@ let history: number[] = []
 let rawHistory: number[] = []
 let cacheTotals = { input: 0, read: 0, write: 0 }
 let contextPercent: number | null = null
+let imageCount: number | null = null
 let calls: Call[] = []
 let callsThisTurn = 0
 let peakSamples: PeakSample[] = []
@@ -174,6 +177,10 @@ function contextBar(percent: number | null): string {
 function isManagedInstall(root: string): boolean {
   const path = root.replace(/\/+$/, '')
   return path === MANAGED_ROOT || path.includes('/token-speed-local/')
+}
+
+function imageLabel(count: number | null | undefined): string {
+  return typeof count === 'number' && count > 0 ? `▣ ${count}` : '▣'
 }
 
 function formatTime(sec: number): string {
@@ -300,6 +307,7 @@ async function writeSnapshot($: EngineInterface, now?: number): Promise<void> {
     history: history.slice(),
     cacheHit: cacheHitPercent(),
     contextPercent,
+    imageCount,
     peak60m: peak60m > 0 ? peak60m : null,
     elapsedSec: elapsed,
     isActive,
@@ -365,6 +373,7 @@ function resetSession(): void {
   rawHistory = []
   cacheTotals = { input: 0, read: 0, write: 0 }
   contextPercent = null
+  imageCount = null
   calls = []
   callsThisTurn = 0
   peakSamples = []
@@ -437,7 +446,17 @@ async function observe($: EngineInterface, chunk: TurnStepChunk): Promise<void> 
   }
 }
 
-async function cleanImages($: EngineInterface, surface: string, managed: boolean): Promise<void> {
+async function countSessionImages($: EngineInterface): Promise<number | null> {
+  try {
+    const messages = await $.session.messages({ as: 'api' })
+    if (!Array.isArray(messages)) return null
+    return countImages(messages)
+  } catch {
+    return null
+  }
+}
+
+async function requestClean($: EngineInterface, surface: string, managed: boolean): Promise<void> {
   if (surface === 'desktop' && !managed) {
     await $.ui.open({
       id: SETUP_PANE,
@@ -456,6 +475,27 @@ async function cleanImages($: EngineInterface, surface: string, managed: boolean
     return
   }
 
+  imageCount = await countSessionImages($)
+  await writeSnapshot($)
+
+  if (imageCount === 0) {
+    await $.ui.toast('上下文里没有图片可清理')
+    return
+  }
+
+  await $.ui.open({
+    id: CLEAN_PANE,
+    title: '清理会话中的图片',
+    focus: true,
+    closeOnEscape: true,
+    rows: 10,
+    columns: 92,
+  })
+}
+
+async function runClean($: EngineInterface): Promise<void> {
+  await $.ui.close({ id: CLEAN_PANE })
+
   cleanRequested = true
   cleanApplied = false
   cleanMessage = ''
@@ -465,6 +505,7 @@ async function cleanImages($: EngineInterface, surface: string, managed: boolean
     try {
       const usage = await $.session.usage()
       contextPercent = typeof usage.context.percent === 'number' ? usage.context.percent : null
+      imageCount = await countSessionImages($)
       await writeSnapshot($)
     } catch {
       // keep the last reading
@@ -528,6 +569,25 @@ async function reportSetupResult($: EngineInterface): Promise<void> {
 
 export const register: Register = on => {
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
+    if (e.requestId === CLEAN_PANE) {
+      const { Box, Text, Button } = $.ui.resolve(e)
+      const count = imageCount
+      return (
+        <Box flexDirection="column" gap="sm" padding={1}>
+          <Text bold>清理会话中的图片？</Text>
+          <Text dimColor>
+            {count === null ? '清理会移除较早消息里的图片' : `当前上下文有 ${count} 张图片，清理会移除较早消息里的图片`}
+            ，保留最近 {KEEP_LAST} 条消息的完整内容。
+          </Text>
+          <Text dimColor>只在本地重写会话历史，不调用模型、不压缩上下文；原始图片文件不受影响。已清理的内容无法恢复。</Text>
+          <Box gap="sm">
+            <Button key="clean-cancel" label="取消" plain dimColor autoFocus onPress={() => { void $.ui.close({ id: CLEAN_PANE }) }} />
+            <Button key="clean-confirm" label="清理图片" variant="primary" onPress={() => { void runClean($) }} />
+          </Box>
+        </Box>
+      )
+    }
+
     if (e.requestId !== SETUP_PANE) return next(e)
     const { Box, Text, Button } = $.ui.resolve(e)
     return (
@@ -649,6 +709,8 @@ export const register: Register = on => {
         // keep the last reading
       }
 
+      imageCount = await countSessionImages($)
+
       await writeSnapshot($, now)
     }
     return next(e)
@@ -686,7 +748,7 @@ export const register: Register = on => {
           <Text dimColor>{timerText}</Text>
           <Text dimColor>·</Text>
           <Box key="clean-hover">
-            <Button key="clean-images" label="⌫ 清图" plain dimColor hover={{ color: ACCENT }} onPress={() => { void cleanImages($, e.surface, managed) }} />
+            <Button key="clean-images" label={imageLabel(s.imageCount)} plain dimColor hover={{ color: ACCENT }} onPress={() => { void requestClean($, e.surface, managed) }} />
           </Box>
         </Box>
       )
@@ -716,7 +778,7 @@ export const register: Register = on => {
           <Text dimColor>{timerText}</Text>
           <Text dimColor>·</Text>
           <Box key="clean-hover">
-            <Button key="clean-images" label="⌫ 清图" plain dimColor hover={{ color: ACCENT }} onPress={() => { void cleanImages($, e.surface, managed) }} />
+            <Button key="clean-images" label={imageLabel(s.imageCount)} plain dimColor hover={{ color: ACCENT }} onPress={() => { void requestClean($, e.surface, managed) }} />
           </Box>
         </Box>
       </Box>
