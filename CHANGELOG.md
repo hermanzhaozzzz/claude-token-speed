@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1 — 2026-11-15
+
+- The installer and the desktop setup script now write `${SRC}` and `${STATUS}` with braces, because each value is followed by a multibyte character (`…` and `）`) in the same string. bash ends a variable name at the first byte that cannot belong to one, so the output is unchanged; the braces make the boundary explicit in every locale.
+
 ## 1.5.0 — 2026-11-14
 
 - The right end of the band shows **▣** and the number of images in the session's context, instead of the `⌫ 清图` text button. The count reads `$.session.messages({ as: "api" })` and includes images inside tool results, so it is what the next request would carry; it refreshes on turn completion and whenever the button is pressed. With no images the icon shows alone in a dimmer state.

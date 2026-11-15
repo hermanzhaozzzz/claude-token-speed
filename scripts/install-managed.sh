@@ -65,7 +65,7 @@ fi
 
 if [ -n "$SOURCE" ]; then
   SRC="$SOURCE"
-  echo "Using the plugin at $SRC…"
+  echo "Using the plugin at ${SRC}…"
   if [ ! -f "$SRC/.claude-plugin/plugin.json" ]; then
     echo "The plugin manifest is missing from $SRC." >&2
     exit 1

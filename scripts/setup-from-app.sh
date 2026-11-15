@@ -90,7 +90,7 @@ elif echo "$OUT" | grep -qi 'cancel\|取消\|(-128)'; then
   echo "The admin dialog was dismissed."
   status canceled ""
 else
-  status failed "安装失败（退出码 $STATUS），详见 /tmp/token-speed-setup.log"
+  status failed "安装失败（退出码 ${STATUS}），详见 /tmp/token-speed-setup.log"
 fi
 
 rm -f "$RUN"
